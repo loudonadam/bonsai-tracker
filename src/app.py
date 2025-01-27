@@ -4,7 +4,7 @@ from datetime import date, datetime
 from PIL import Image
 import os
 from database import add_bonsai_tree, get_session, BonsaiTree
-from image_utils import extract_image_metadata, generate_image_filename
+import sys
 
 def main():
     st.title("Bonsai Tracker")
