@@ -4,3 +4,4 @@ env/
 .venv/
 bonsai_tracker_env/
 __pycache__/
+data/images/
