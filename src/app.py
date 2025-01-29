@@ -1,3 +1,4 @@
+# PYTHONPATH=. streamlit run src/app.py
 # src/app.py
 import streamlit as st
 from src.database import get_db, SessionLocal
