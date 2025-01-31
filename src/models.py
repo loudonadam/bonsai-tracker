@@ -20,11 +20,11 @@ class Tree(Base):
     
     id = Column(Integer, primary_key=True)
     tree_number = Column(String(50), unique=True, nullable=False)
+    tree_name = Column(String(50), unique=True, nullable=False)
     species_id = Column(Integer, ForeignKey('species.id'), nullable=False)
     date_acquired = Column(DateTime, nullable=False)
     origin_date = Column(DateTime, nullable=False)  # Used for calculating true age
     current_girth = Column(Float)  # in cm
-    current_height = Column(Float)  # in cm
     notes = Column(Text)
     
     # Relationships
@@ -52,7 +52,6 @@ class TreeUpdate(Base):
     tree_id = Column(Integer, ForeignKey('trees.id'), nullable=False)
     update_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     girth = Column(Float)  # in cm
-    height = Column(Float)  # in cm
     work_performed = Column(Text, nullable=False)
     
     # Relationships

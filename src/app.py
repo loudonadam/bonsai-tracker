@@ -1,3 +1,4 @@
+# PYTHONPATH=. streamlit run src/app.py
 # src/app.py
 import streamlit as st
 from src.database import get_db, SessionLocal
@@ -141,7 +142,7 @@ def show_update_form(tree_id):
             st.session_state.page = "View Trees"
             st.rerun()
             
-        st.header(f"Update: {tree.species_info.name} ({tree.tree_number})")
+        st.header(f"Update: {tree.tree_name} ({tree.tree_number})")
         
         with st.form("tree_update_form"):
             current_girth = st.number_input("New Trunk Width (cm)", 
@@ -208,6 +209,11 @@ def show_add_tree_form():
         new_tree_number = generate_tree_number(db)
         st.info(f"Tree Number will be: {new_tree_number}")
         
+        tree_name = st.text_input(
+            "Tree Name",
+            help="Give your tree a personal name"
+)
+        
         # Species selection with "Add New" option
         species_options = ["Add New Species"] + existing_species
         species_selection = st.selectbox(
@@ -232,8 +238,6 @@ def show_add_tree_form():
         
         with col1:
             current_girth = st.number_input("Current Girth (cm)", 
-                min_value=0.0, step=0.1)
-            current_height = st.number_input("Current Height (cm)", 
                 min_value=0.0, step=0.1)
         
         with col2:
@@ -266,11 +270,11 @@ def show_add_tree_form():
                 # Create new tree
                 new_tree = Tree(
                     tree_number=new_tree_number,
+                    tree_name=tree_name,
                     species_id=species_obj.id,
                     date_acquired=datetime.combine(date_acquired, datetime.min.time()),
                     origin_date=datetime.combine(origin_date, datetime.min.time()),
                     current_girth=current_girth,
-                    current_height=current_height,
                     notes=notes
                 )
                 
@@ -324,9 +328,9 @@ def main():
             
             # Create grid layout
             if trees:
-                cols = st.columns(3)
+                cols = st.columns(4)
                 for idx, tree in enumerate(trees):
-                    with cols[idx % 3]:
+                    with cols[idx % 4]:
                         create_tree_card(tree, db)
         finally:
             db.close()
