@@ -115,19 +115,23 @@ def show_tree_gallery(tree_id):
         if st.button("← Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
+        
+        col1, col2, col3 = st.columns([1, 6, 2])
+        with col2:
             
-        st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
-        
-        photos = db.query(Photo).filter(
-            Photo.tree_id == tree_id
-        ).order_by(Photo.photo_date).all()
-        
-        for photo in photos:
-            if os.path.exists(photo.file_path):
-                st.image(photo.file_path, caption=f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
-                if photo.description:
-                    st.write(photo.description)
-                st.markdown("---")
+            st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
+            
+            photos = db.query(Photo).filter(
+                Photo.tree_id == tree_id
+            ).order_by(Photo.photo_date).all()
+            
+            col1, col2, col3 = st.columns([1, 5, 3])
+            with col2:
+                for photo in photos:
+                    if os.path.exists(photo.file_path):
+                        st.image(photo.file_path, caption=f"Date: {photo.photo_date.strftime('%Y-%m-%d')}",
+                                use_column_width=True)
+                        st.markdown("---")
     finally:
         db.close()
 
@@ -137,14 +141,26 @@ def show_update_form(tree_id):
     try:
         tree = db.query(Tree).filter(Tree.id == tree_id).first()
         
-        # Add "Back to Collection" button at the top
         if st.button("← Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
             
         st.header(f"Update: {tree.tree_name} ({tree.tree_number})")
-        
-        with st.form("tree_update_form"):
+
+        # Initialize session state for this specific tree's reminder
+        session_key = f"set_reminder_{tree_id}"
+        if session_key not in st.session_state:
+            st.session_state[session_key] = False
+
+        # Checkbox outside the form for immediate feedback
+        set_reminder = st.checkbox(
+            "Set Reminder",
+            value=st.session_state[session_key],
+            key=f"reminder_check_{tree_id}",
+            on_change=lambda: st.session_state.update({session_key: not st.session_state[session_key]})
+        )
+
+        with st.form(f"tree_update_form_{tree_id}"):
             current_girth = st.number_input("New Trunk Width (cm)", 
                 value=tree.current_girth if tree.current_girth else 0.0,
                 step=0.1)
@@ -154,10 +170,20 @@ def show_update_form(tree_id):
             uploaded_files = st.file_uploader("Add Photos", 
                 type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
             
-            reminder_date = st.date_input("Set Reminder Date (optional)")
-            reminder_message = st.text_input("Reminder Message")
+            # Show reminder fields based on checkbox state
+            if st.session_state[session_key]:
+                reminder_date = st.date_input("Reminder Date (required)")
+                reminder_message = st.text_input("Reminder Message (required)")
+            else:
+                reminder_date = None
+                reminder_message = None
             
             if st.form_submit_button("Save Update"):
+                # Validate reminder fields if checkbox is checked
+                if st.session_state[session_key] and (not reminder_date or not reminder_message):
+                    st.error("Please fill in both reminder fields when setting a reminder")
+                    st.rerun()
+                
                 # Create tree update
                 update = TreeUpdate(
                     tree_id=tree_id,
@@ -183,7 +209,7 @@ def show_update_form(tree_id):
                         db.add(photo)
                 
                 # Create reminder if specified
-                if reminder_date and reminder_message:
+                if st.session_state[session_key]:
                     reminder = Reminder(
                         tree_id=tree_id,
                         reminder_date=datetime.combine(reminder_date, datetime.min.time()),
@@ -193,6 +219,8 @@ def show_update_form(tree_id):
                 
                 db.commit()
                 st.success("Update saved successfully!")
+                # Reset the reminder state after successful submission
+                st.session_state[session_key] = False
                 st.session_state.page = "View Trees"
                 st.rerun()
     finally:
