@@ -1,4 +1,3 @@
-# PYTHONPATH=. streamlit run src/app.py
 # src/app.py
 import streamlit as st
 from src.database import get_db, SessionLocal
@@ -6,9 +5,24 @@ from src.models import Tree, TreeUpdate, Photo, Reminder, Species
 from datetime import datetime
 import os
 from PIL import Image
+import PIL.ExifTags
+import glob
 
-# Set page config
-st.set_page_config(page_title="Bonsai Tracker", layout="wide")
+def get_exif_date(image_path):
+    """Extract date from image EXIF data if available"""
+    try:
+        image = Image.open(image_path)
+        exif = {
+            PIL.ExifTags.TAGS[k]: v
+            for k, v in image._getexif().items()
+            if k in PIL.ExifTags.TAGS
+        }
+        date_str = exif.get('DateTimeOriginal')
+        if date_str:
+            return datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+    except:
+        pass
+    return datetime.now()
 
 def generate_tree_number(db):
     """Generate a unique tree number"""
@@ -43,141 +57,294 @@ def save_uploaded_image(uploaded_file):
         
     return file_path
 
-def main():
-    st.title("Bonsai Tracker")
-    
-    # Sidebar navigation
-    page = st.sidebar.selectbox("Navigate", ["View Trees", "Add New Tree"])
-    
-    if page == "Add New Tree":
-        st.header("Add New Tree")
-        
-        # Get existing species list
-        db = SessionLocal()
-        existing_species = get_existing_species(db)
-        db.close()
-        
-        with st.form(key="new_tree_form", clear_on_submit=True):
-            # Get a new tree number (display only)
-            db = SessionLocal()
-            new_tree_number = generate_tree_number(db)
-            db.close()
+def save_uploaded_images(uploaded_files):
+    """Save multiple uploaded images and return their paths"""
+    image_paths = []
+    for uploaded_file in uploaded_files:
+        path = save_uploaded_image(uploaded_file)
+        image_paths.append(path)
+    return image_paths
+
+def create_tree_card(tree, db):
+    """Create a card display for a single tree"""
+    with st.container():
+        # Use expander for the card-like effect
+        with st.expander(f"{tree.species_info.name} ({tree.tree_number})", expanded=False):
+            # Display the latest photo
+            latest_photo = db.query(Photo).filter(
+                Photo.tree_id == tree.id
+            ).order_by(Photo.photo_date.desc()).first()
             
-            st.info(f"Tree Number will be: {new_tree_number}")
-            
-            # Species selection with "Add New" option
-            species_options = ["Add New Species"] + existing_species
-            species_selection = st.selectbox(
-                "Species*",
-                options=species_options,
-                index=len(species_options)-1 if existing_species else 0,
-                help="Select existing species or add new one"
-            )
-            
-            # Show text input if "Add New Species" is selected
-            if species_selection == "Add New Species":
-                new_species = st.text_input(
-                    "Enter New Species Name*",
-                    help="Enter the botanical or common name of your tree"
-                )
-                species = new_species
+            if latest_photo and os.path.exists(latest_photo.file_path):
+                st.image(latest_photo.file_path, width=200)
             else:
-                species = species_selection
+                st.image("https://via.placeholder.com/150", width=200)
             
-            # Rest of the form
-            col1, col2 = st.columns(2)
+            # Display tree information
+            if tree.notes:
+                st.write("Special Note:", tree.notes)
             
-            with col1:
-                current_girth = st.number_input("Current Girth (cm)", 
-                    min_value=0.0, step=0.1)
-                current_height = st.number_input("Current Height (cm)", 
-                    min_value=0.0, step=0.1)
+            latest_update = db.query(TreeUpdate).filter(
+                TreeUpdate.tree_id == tree.id
+            ).order_by(TreeUpdate.update_date.desc()).first()
             
-            with col2:
-                date_acquired = st.date_input("Date Acquired*",
-                    help="When did you acquire this tree?")
-                origin_date = st.date_input("Origin Date*",
-                    help="Estimated start date of the tree (for age calculation)")
+            if latest_update:
+                st.write("Latest Update:", latest_update.work_performed)
+                st.write(f"Last updated: {latest_update.update_date.strftime('%Y-%m-%d')}")
+            
+            # Action buttons in a single row
+            st.button("Add Update", key=f"update_{tree.id}", 
+                on_click=lambda: set_page_and_tree('Update Tree', tree.id))
+            
+            st.button("Tree Gallery", key=f"gallery_{tree.id}", 
+                on_click=lambda: set_page_and_tree('Tree Gallery', tree.id))
+
+def set_page_and_tree(page, tree_id=None):
+    """Helper function to set both page and selected tree"""
+    st.session_state.page = page
+    st.session_state.selected_tree = tree_id
+    
+def show_tree_gallery(tree_id):
+    """Display gallery view for a specific tree"""
+    db = SessionLocal()
+    try:
+        tree = db.query(Tree).filter(Tree.id == tree_id).first()
+        
+        # Add "Back to Collection" button at the top
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+            
+        st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
+        
+        photos = db.query(Photo).filter(
+            Photo.tree_id == tree_id
+        ).order_by(Photo.photo_date).all()
+        
+        for photo in photos:
+            if os.path.exists(photo.file_path):
+                st.image(photo.file_path, caption=f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
+                if photo.description:
+                    st.write(photo.description)
+                st.markdown("---")
+    finally:
+        db.close()
+
+def show_update_form(tree_id):
+    """Display the update form for a specific tree"""
+    db = SessionLocal()
+    try:
+        tree = db.query(Tree).filter(Tree.id == tree_id).first()
+        
+        # Add "Back to Collection" button at the top
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+            
+        st.header(f"Update: {tree.species_info.name} ({tree.tree_number})")
+        
+        with st.form("tree_update_form"):
+            current_girth = st.number_input("New Trunk Width (cm)", 
+                value=tree.current_girth if tree.current_girth else 0.0,
+                step=0.1)
+            
+            work_description = st.text_area("Work Performed")
+            
+            uploaded_files = st.file_uploader("Add Photos", 
+                type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+            
+            reminder_date = st.date_input("Set Reminder Date (optional)")
+            reminder_message = st.text_input("Reminder Message")
+            
+            if st.form_submit_button("Save Update"):
+                # Create tree update
+                update = TreeUpdate(
+                    tree_id=tree_id,
+                    girth=current_girth,
+                    work_performed=work_description
+                )
+                db.add(update)
                 
-            notes = st.text_area("Notes", 
-                help="Any special notes about this tree")
-            
-            uploaded_file = st.file_uploader("Upload Initial Photo", 
-                type=['png', 'jpg', 'jpeg'])
-            
-            if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Preview", width=300)
-            
-            submit_button = st.form_submit_button("Add Tree")
-            
-            if submit_button:
-                if not species:
-                    st.error("Species is required!")
-                    return
+                # Update tree's current girth
+                tree.current_girth = current_girth
                 
-                try:
-                    db = SessionLocal()
-                    
-                    # Get or create species
-                    species_obj = get_or_create_species(db, species)
-                    
-                    # Create new tree
-                    new_tree = Tree(
-                        tree_number=generate_tree_number(db),
-                        species_id=species_obj.id,
-                        date_acquired=datetime.combine(date_acquired, datetime.min.time()),
-                        origin_date=datetime.combine(origin_date, datetime.min.time()),
-                        current_girth=current_girth,
-                        current_height=current_height,
-                        notes=notes
-                    )
-                    
-                    db.add(new_tree)
-                    db.commit()
-                    
-                    # Handle photo if uploaded
-                    if uploaded_file:
-                        image_path = save_uploaded_image(uploaded_file)
+                # Save photos
+                if uploaded_files:
+                    image_paths = save_uploaded_images(uploaded_files)
+                    for path in image_paths:
+                        photo_date = get_exif_date(path)
                         photo = Photo(
-                            tree_id=new_tree.id,
-                            file_path=image_path,
-                            photo_date=datetime.now(),
-                            description="Initial photo"
+                            tree_id=tree_id,
+                            file_path=path,
+                            photo_date=photo_date,
+                            description=work_description
                         )
                         db.add(photo)
-                        db.commit()
-                    
-                    st.success(f"Tree {new_tree.tree_number} added successfully!")
-                    
-                except Exception as e:
-                    st.error(f"Error adding tree: {str(e)}")
-                finally:
-                    db.close()
+                
+                # Create reminder if specified
+                if reminder_date and reminder_message:
+                    reminder = Reminder(
+                        tree_id=tree_id,
+                        reminder_date=datetime.combine(reminder_date, datetime.min.time()),
+                        message=reminder_message
+                    )
+                    db.add(reminder)
+                
+                db.commit()
+                st.success("Update saved successfully!")
+                st.session_state.page = "View Trees"
+                st.rerun()
+    finally:
+        db.close()
 
-    elif page == "View Trees":
-        st.header("Your Trees")
+def show_add_tree_form():
+    """Display the form for adding a new tree"""
+    # Get existing species list
+    db = SessionLocal()
+    existing_species = get_existing_species(db)
+    
+    with st.form(key="new_tree_form", clear_on_submit=True):
+        # Get a new tree number (display only)
+        new_tree_number = generate_tree_number(db)
+        st.info(f"Tree Number will be: {new_tree_number}")
+        
+        # Species selection with "Add New" option
+        species_options = ["Add New Species"] + existing_species
+        species_selection = st.selectbox(
+            "Species*",
+            options=species_options,
+            index=len(species_options)-1 if existing_species else 0,
+            help="Select existing species or add new one"
+        )
+        
+        # Show text input if "Add New Species" is selected
+        if species_selection == "Add New Species":
+            new_species = st.text_input(
+                "Enter New Species Name*",
+                help="Enter the botanical or common name of your tree"
+            )
+            species = new_species
+        else:
+            species = species_selection
+        
+        # Rest of the form
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            current_girth = st.number_input("Current Girth (cm)", 
+                min_value=0.0, step=0.1)
+            current_height = st.number_input("Current Height (cm)", 
+                min_value=0.0, step=0.1)
+        
+        with col2:
+            date_acquired = st.date_input("Date Acquired*",
+                help="When did you acquire this tree?")
+            origin_date = st.date_input("Origin Date*",
+                help="Estimated start date of the tree (for age calculation)")
+            
+        notes = st.text_area("Notes", 
+            help="Any special notes about this tree")
+        
+        uploaded_file = st.file_uploader("Upload Initial Photo", 
+            type=['png', 'jpg', 'jpeg'])
+        
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Preview", width=300)
+        
+        submit_button = st.form_submit_button("Add Tree")
+        
+        if submit_button:
+            if not species:
+                st.error("Species is required!")
+                return
+            
+            try:
+                # Get or create species
+                species_obj = get_or_create_species(db, species)
+                
+                # Create new tree
+                new_tree = Tree(
+                    tree_number=new_tree_number,
+                    species_id=species_obj.id,
+                    date_acquired=datetime.combine(date_acquired, datetime.min.time()),
+                    origin_date=datetime.combine(origin_date, datetime.min.time()),
+                    current_girth=current_girth,
+                    current_height=current_height,
+                    notes=notes
+                )
+                
+                db.add(new_tree)
+                db.commit()
+                
+                # Handle photo if uploaded
+                if uploaded_file:
+                    image_path = save_uploaded_image(uploaded_file)
+                    photo = Photo(
+                        tree_id=new_tree.id,
+                        file_path=image_path,
+                        photo_date=datetime.now(),
+                        description="Initial photo"
+                    )
+                    db.add(photo)
+                    db.commit()
+                
+                st.success(f"Tree {new_tree.tree_number} added successfully!")
+                st.session_state.page = "View Trees"
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error adding tree: {str(e)}")
+    
+    db.close()
+
+def main():
+    st.set_page_config(page_title="Bonsai Tracker", layout="wide")
+    
+    # Initialize session state
+    if 'page' not in st.session_state:
+        st.session_state.page = "View Trees"
+    if 'selected_tree' not in st.session_state:
+        st.session_state.selected_tree = None
+    
+    st.title("Bonsai Tracker")
+    
+    # Main content
+    if st.session_state.page == "View Trees":
+        st.header("Your Bonsai Collection")
+        
+        # Add New Tree button at the top
+        if st.button("➕ Add New Tree"):
+            st.session_state.page = "Add New Tree"
+            st.rerun()
+        
         db = SessionLocal()
         try:
             trees = db.query(Tree).all()
-            if not trees:
-                st.info("No trees added yet. Use the 'Add New Tree' page to get started!")
-            else:
-                for tree in trees:
-                    with st.expander(f"Tree #{tree.tree_number} - {tree.species_info.name}"):
-                        st.write(f"Training Age: {tree.training_age:.1f} years")
-                        st.write(f"True Age: {tree.true_age:.1f} years")
-                        st.write(f"Current Measurements: {tree.current_height}cm tall, {tree.current_girth}cm girth")
-                        if tree.notes:
-                            st.write("Notes:", tree.notes)
-                        
-                        latest_photo = db.query(Photo).filter(Photo.tree_id == tree.id).order_by(Photo.photo_date.desc()).first()
-                        if latest_photo and os.path.exists(latest_photo.file_path):
-                            st.image(latest_photo.file_path, caption="Most recent photo", width=300)
-        except Exception as e:
-            st.error(f"Error loading trees: {str(e)}")
+            
+            # Create grid layout
+            if trees:
+                cols = st.columns(3)
+                for idx, tree in enumerate(trees):
+                    with cols[idx % 3]:
+                        create_tree_card(tree, db)
         finally:
             db.close()
+    
+    elif st.session_state.page == "Add New Tree":
+        # Add "Back to Collection" button at the top
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+            
+        st.header("Add New Tree")
+        show_add_tree_form()
+    
+    elif st.session_state.page == "Update Tree" and st.session_state.selected_tree:
+        show_update_form(st.session_state.selected_tree)
+    
+    elif st.session_state.page == "Tree Gallery" and st.session_state.selected_tree:
+        show_tree_gallery(st.session_state.selected_tree)
 
 if __name__ == "__main__":
     main()
