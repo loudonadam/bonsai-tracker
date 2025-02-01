@@ -78,6 +78,7 @@ class Reminder(Base):
     reminder_date = Column(DateTime, nullable=False)
     message = Column(Text, nullable=False)
     is_completed = Column(Integer, default=0)  # 0 = pending, 1 = completed
+    notification_sent = Column(Integer, default=0)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships

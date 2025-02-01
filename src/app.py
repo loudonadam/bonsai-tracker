@@ -77,7 +77,7 @@ def create_tree_card(tree, db):
             ).order_by(Photo.photo_date.desc()).first()
             
             if latest_photo and os.path.exists(latest_photo.file_path):
-                st.image(latest_photo.file_path, width=200)
+                st.image(latest_photo.file_path, width=200, use_column_width=True)
             else:
                 st.image("https://via.placeholder.com/150", width=200)
             
@@ -332,6 +332,9 @@ def show_add_tree_form():
 
 def main():
     st.set_page_config(page_title="Bonsai Tracker", layout="wide")
+    
+    with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     
     # Initialize session state
     if 'page' not in st.session_state:
