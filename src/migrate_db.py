@@ -38,7 +38,8 @@ def migrate_database():
                 'date_acquired': t.date_acquired,
                 'origin_date': t.origin_date,
                 'current_girth': t.current_girth,
-                'notes': t.notes
+                'notes': t.notes,
+                'tree_name': None  # New field with default value
             }
             trees_data.append(tree_dict)
         
