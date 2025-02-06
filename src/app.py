@@ -455,10 +455,14 @@ def show_edit_tree_form(tree_id):
         db.close()
 
 def main():
-    st.set_page_config(page_title="Bonsai Tracker", layout="wide")
+    st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="collapsed")
     
     with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    
+    with st.sidebar:
+        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=100)  # Add your logo
+        st.title("Bonsai Tracker")
     
     # Initialize session state
     if 'page' not in st.session_state:

@@ -5,3 +5,101 @@ button[title="View fullscreen"] {
 a[class="st-emotion-cache-yinll1 e1nzilvr3"] {
     display: none;
   }
+
+  /* Base styles to match Raleway font and colors */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;600&display=swap');
+
+.stApp {
+    font-family: 'Raleway', sans-serif;
+    background-color: #f1f1f1;
+}
+
+/* Header styling */
+.stApp header {
+    background-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Raleway', sans-serif;
+    font-weight: 600;
+    color: #333;
+}
+
+/* Card styling */
+.tree-card {
+    background-color: white;
+    border-radius: 4px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+    margin-bottom: 1rem;
+}
+
+.tree-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.tree-card img {
+    width: 100%;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.tree-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+/* Button styling */
+.stButton > button {
+    background-color: #009688;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-family: 'Raleway', sans-serif;
+    transition: background-color 0.2s;
+}
+
+
+/* Form styling */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    font-family: 'Raleway', sans-serif;
+    border-radius: 4px;
+}
+
+/* Container styling */
+div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+
+/* Gallery styling */
+.gallery-image {
+    margin-bottom: 1.5rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Success/Error message styling */
+.stSuccess, .stError {
+    font-family: 'Raleway', sans-serif;
+    border-radius: 4px;
+}
+
+/* Add spacing between form fields */
+.stForm > div {
+    margin-bottom: 1rem;
+}
+
+/* Sidebar styling if needed */
+.css-1d391kg {
+    background-color: white;
+}
