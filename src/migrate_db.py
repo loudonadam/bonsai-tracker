@@ -1,137 +1,114 @@
 # src/migrate_db.py
 import os
+import sys
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from models import Base, Tree, Species, TreeUpdate, Photo, Reminder
-import shutil
-from datetime import datetime
 
-# Get the database path
+# Get the absolute path to the data directory
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
 DB_PATH = os.path.join(DATA_DIR, 'bonsai.db')
-BACKUP_PATH = os.path.join(DATA_DIR, 'bonsai_backup.db')
 
-def backup_database():
-    """Create a backup of the existing database"""
-    if os.path.exists(DB_PATH):
-        shutil.copy2(DB_PATH, BACKUP_PATH)
-        print(f"Backup created at {BACKUP_PATH}")
-
-def migrate_database():
-    """Perform the database migration"""
-    # Create backup first
-    backup_database()
+def run_migration():
+    """
+    Run migration to add is_archived column to trees table
+    """
+    # Create engine using the same database path as in database.py
+    engine = create_engine(f'sqlite:///{DB_PATH}')
     
-    # Connect to existing database
-    old_engine = create_engine(f'sqlite:///{DB_PATH}')
-    OldSession = sessionmaker(bind=old_engine)
-    old_session = OldSession()
+    # SQL commands to run
+    commands = [
+        # Add is_archived column with default value of 0
+        """
+        ALTER TABLE trees
+        ADD COLUMN is_archived INTEGER DEFAULT 0;
+        """,
+        
+        # Update any existing NULL values to 0
+        """
+        UPDATE trees
+        SET is_archived = 0
+        WHERE is_archived IS NULL;
+        """,
+        
+        # Add NOT NULL constraint
+        """
+        PRAGMA foreign_keys=off;
+        BEGIN TRANSACTION;
+
+        CREATE TABLE trees_new (
+            id INTEGER PRIMARY KEY,
+            tree_number VARCHAR(50) NOT NULL UNIQUE,
+            tree_name VARCHAR(50) NOT NULL UNIQUE,
+            species_id INTEGER NOT NULL,
+            date_acquired DATETIME NOT NULL,
+            origin_date DATETIME NOT NULL,
+            current_girth FLOAT,
+            notes TEXT,
+            is_archived INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(species_id) REFERENCES species(id)
+        );
+
+        INSERT INTO trees_new 
+        SELECT id, tree_number, tree_name, species_id, date_acquired, 
+               origin_date, current_girth, notes, COALESCE(is_archived, 0)
+        FROM trees;
+
+        DROP TABLE trees;
+        ALTER TABLE trees_new RENAME TO trees;
+
+        COMMIT;
+        PRAGMA foreign_keys=on;
+        """
+    ]
     
     try:
-        # Read all existing data using only the columns we know exist
-        trees_data = []
-        for t in old_session.query(Tree).all():
-            tree_dict = {
-                'id': t.id,
-                'tree_number': t.tree_number,
-                'species_id': t.species_id,
-                'date_acquired': t.date_acquired,
-                'origin_date': t.origin_date,
-                'current_girth': t.current_girth,
-                'notes': t.notes,
-                'tree_name': None  # New field with default value
-            }
-            trees_data.append(tree_dict)
-        
-        species_data = [
-            {
-                'id': s.id,
-                'name': s.name,
-                'created_at': s.created_at
-            } for s in old_session.query(Species).all()
-        ]
-        
-        updates_data = [
-            {
-                'id': u.id,
-                'tree_id': u.tree_id,
-                'update_date': u.update_date,
-                'girth': u.girth,
-                'work_performed': u.work_performed
-            } for u in old_session.query(TreeUpdate).all()
-        ]
-        
-        photos_data = [
-            {
-                'id': p.id,
-                'tree_id': p.tree_id,
-                'file_path': p.file_path,
-                'photo_date': p.photo_date,
-                'upload_date': p.upload_date,
-                'description': p.description
-            } for p in old_session.query(Photo).all()
-        ]
-        
-        reminders_data = [
-            {
-                'id': r.id,
-                'tree_id': r.tree_id,
-                'reminder_date': r.reminder_date,
-                'message': r.message,
-                'is_completed': r.is_completed,
-                'created_date': r.created_date
-            } for r in old_session.query(Reminder).all()
-        ]
-        
-        # Close old session
-        old_session.close()
-        
-        # Remove old database
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-        
-        # Create new database with updated schema
-        new_engine = create_engine(f'sqlite:///{DB_PATH}')
-        Base.metadata.create_all(new_engine)
-        
-        # Create new session
-        NewSession = sessionmaker(bind=new_engine)
-        new_session = NewSession()
-        
-        # Restore data
-        for species in species_data:
-            new_session.add(Species(**species))
-        new_session.commit()  # Commit species first
-        
-        for tree in trees_data:
-            new_session.add(Tree(**tree))
-        new_session.commit()  # Commit trees next
-        
-        for update in updates_data:
-            new_session.add(TreeUpdate(**update))
-        
-        for photo in photos_data:
-            new_session.add(Photo(**photo))
-        
-        for reminder in reminders_data:
-            new_session.add(Reminder(**reminder))
-        
-        # Final commit
-        new_session.commit()
+        with engine.connect() as connection:
+            # SQLite doesn't support ALTER COLUMN, so we'll execute commands one by one
+            for command in commands:
+                # Split the command into individual statements
+                statements = command.strip().split(';')
+                for statement in statements:
+                    if statement.strip():
+                        connection.execute(text(statement))
+                connection.commit()
         print("Migration completed successfully!")
         
     except Exception as e:
-        print(f"Error during migration: {e}")
-        # Restore from backup if something went wrong
-        if os.path.exists(BACKUP_PATH):
-            shutil.copy2(BACKUP_PATH, DB_PATH)
-            print("Database restored from backup")
-    
-    finally:
-        if 'new_session' in locals():
-            new_session.close()
-        if 'old_session' in locals():
-            old_session.close()
+        print(f"Error during migration: {str(e)}")
+        print("Rolling back changes...")
+        
+        # Rollback command to remove column if something goes wrong
+        rollback = """
+        PRAGMA foreign_keys=off;
+        BEGIN TRANSACTION;
+
+        CREATE TABLE trees_backup AS SELECT 
+            id, tree_number, tree_name, species_id, date_acquired, 
+            origin_date, current_girth, notes
+        FROM trees;
+
+        DROP TABLE trees;
+        ALTER TABLE trees_backup RENAME TO trees;
+
+        COMMIT;
+        PRAGMA foreign_keys=on;
+        """
+        
+        try:
+            with engine.connect() as connection:
+                statements = rollback.strip().split(';')
+                for statement in statements:
+                    if statement.strip():
+                        connection.execute(text(statement))
+                connection.commit()
+            print("Rollback completed successfully")
+        except Exception as e:
+            print(f"Error during rollback: {str(e)}")
+            print("Manual intervention may be required")
 
 if __name__ == "__main__":
-    migrate_database()
+    # Confirm before running
+    response = input("This will modify your database schema. Are you sure you want to continue? (y/n): ")
+    if response.lower() == 'y':
+        run_migration()
+    else:
+        print("Migration cancelled")

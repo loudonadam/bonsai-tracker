@@ -26,6 +26,8 @@ class Tree(Base):
     origin_date = Column(DateTime, nullable=False)  # Used for calculating true age
     current_girth = Column(Float)  # in cm
     notes = Column(Text)
+    is_archived = Column(Integer, default=0)  # 0 = active, 1 = archived
+    
     
     # Relationships
     species_info = relationship("Species", back_populates="trees")

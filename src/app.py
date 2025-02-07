@@ -69,19 +69,23 @@ def save_uploaded_images(uploaded_files):
 def create_tree_card(tree, db):
     """Create a card display for a single tree with edit functionality"""
     with st.container():
-        # Use expander for the card-like effect
         with st.expander(f"**{tree.tree_name}**  \n*({tree.tree_number})*", expanded=False):
-            # Create a row with tree name and edit button
-            col1, col2 = st.columns([5, 2])
+            # Create a row with tree name and buttons
+            col1, col2, col3 = st.columns([4, 2, 2])
             with col1:
-                # Placeholder for tree details
                 st.write("")
             
             with col2:
-                # Edit button with pencil icon
-                if st.button(f"✏️", key=f"edit_{tree.id}",use_container_width=True):
+                if st.button(f"✏️", key=f"edit_{tree.id}", use_container_width=True):
                     st.session_state.page = "Edit Tree"
                     st.session_state.selected_tree = tree.id
+                    st.rerun()
+            
+            with col3:
+                if st.button("📦", key=f"archive_{tree.id}", use_container_width=True):
+                    tree.is_archived = 1
+                    db.commit()
+                    st.success(f"Tree {tree.tree_number} archived successfully!")
                     st.rerun()
             
             # Display the latest photo
@@ -167,7 +171,7 @@ def show_tree_gallery(tree_id):
                         st.image(photo.file_path, use_column_width=True)
                         
                         # Create columns for date display and action buttons
-                        date_col, edit_col, delete_col = st.columns([4, 1, 1])
+                        date_col, edit_col, delete_col = st.columns([10, 1, 1])
                         
                         with date_col:
                             # Initialize session state for edit mode
@@ -440,6 +444,50 @@ def show_add_tree_form():
         
     db.close()
 
+def show_archived_trees():
+    """Display archived trees with option to delete"""
+    st.header("Archived Trees")
+    
+    db = SessionLocal()
+    try:
+        archived_trees = db.query(Tree).filter(Tree.is_archived == 1).all()
+        
+        if not archived_trees:
+            st.info("No archived trees found.")
+            return
+        
+        for tree in archived_trees:
+            with st.container():
+                col1, col2, col3 = st.columns([6, 2, 2])
+                
+                with col1:
+                    st.write(f"**{tree.tree_name}** ({tree.tree_number})")
+                    st.write(f"Species: {tree.species_info.name}")
+                
+                with col2:
+                    if st.button("Restore", key=f"restore_{tree.id}"):
+                        tree.is_archived = 0
+                        db.commit()
+                        st.success(f"Tree {tree.tree_number} restored!")
+                        st.rerun()
+                
+                with col3:
+                    if st.button("Delete", key=f"delete_{tree.id}"):
+                        # Delete associated photos from filesystem
+                        for photo in tree.photos:
+                            if os.path.exists(photo.file_path):
+                                os.remove(photo.file_path)
+                        
+                        # Delete tree from database
+                        db.delete(tree)
+                        db.commit()
+                        st.success(f"Tree {tree.tree_number} deleted permanently!")
+                        st.rerun()
+                
+                st.markdown("---")
+    finally:
+        db.close()
+
 def show_edit_tree_form(tree_id):
     """Display the form for editing an existing tree's details"""
     db = SessionLocal()
@@ -547,15 +595,28 @@ def main():
     with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     
-    with st.sidebar:
-        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=100)  # Add your logo
-        st.title("Bonsai Tracker")
-    
     # Initialize session state
     if 'page' not in st.session_state:
         st.session_state.page = "View Trees"
     if 'selected_tree' not in st.session_state:
         st.session_state.selected_tree = None
+    
+    # Sidebar
+    with st.sidebar:
+        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=100)
+        st.title("Bonsai Tracker")
+        
+        # Navigation
+        navigation = st.radio(
+            "Navigation",
+            ["Active Trees", "Archived Trees"],
+            label_visibility="collapsed"
+        )
+        
+        if navigation == "Archived Trees":
+            st.session_state.page = "Archived Trees"
+        elif navigation == "Active Trees" and st.session_state.page == "Archived Trees":
+            st.session_state.page = "View Trees"
     
     st.title("Bonsai Tracker")
     
@@ -570,7 +631,8 @@ def main():
         
         db = SessionLocal()
         try:
-            trees = db.query(Tree).all()
+            # Only show active (non-archived) trees
+            trees = db.query(Tree).filter(Tree.is_archived == 0).all()
             
             # Create grid layout
             if trees:
@@ -580,6 +642,9 @@ def main():
                         create_tree_card(tree, db)
         finally:
             db.close()
+    
+    elif st.session_state.page == "Archived Trees":
+        show_archived_trees()
     
     elif st.session_state.page == "Add New Tree":
         # Add "Back to Collection" button at the top
