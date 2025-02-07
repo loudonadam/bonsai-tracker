@@ -118,32 +118,119 @@ def set_page_and_tree(page, tree_id=None):
     st.session_state.page = page
     st.session_state.selected_tree = tree_id
     
+def handle_edit_cancel(photo_id):
+    """Handle canceling edit mode"""
+    st.session_state[f"edit_mode_{photo_id}"] = False
+
+def handle_delete_cancel(photo_id):
+    """Handle canceling delete confirmation"""
+    st.session_state[f"confirm_delete_{photo_id}"] = False
+
 def show_tree_gallery(tree_id):
-    """Display gallery view for a specific tree"""
+    """Display gallery view for a specific tree with photo management functionality"""
     db = SessionLocal()
     try:
         tree = db.query(Tree).filter(Tree.id == tree_id).first()
         
+        # Reset states only when first entering the gallery
+        if 'gallery_initialized' not in st.session_state:
+            for key in list(st.session_state.keys()):
+                if key.startswith(('confirm_delete_', 'edit_mode_')):
+                    del st.session_state[key]
+            st.session_state.gallery_initialized = True
+        
         # Add "Back to Collection" button at the top
         if st.button("← Back to Collection"):
             st.session_state.page = "View Trees"
+            st.session_state.gallery_initialized = False
             st.rerun()
         
         col1, col2, col3 = st.columns([1, 6, 2])
         with col2:
-            
             st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
             
             photos = db.query(Photo).filter(
                 Photo.tree_id == tree_id
             ).order_by(Photo.photo_date).all()
             
-            col1, col2, col3 = st.columns([1, 5, 3])
-            with col2:
-                for photo in photos:
-                    if os.path.exists(photo.file_path):
-                        st.image(photo.file_path, caption=f"Date: {photo.photo_date.strftime('%Y-%m-%d')}",
-                                use_column_width=True)
+            # No photos message
+            if not photos:
+                st.info("No photos available for this tree.")
+                return
+            
+            # Photo display loop
+            for photo in photos:
+                if os.path.exists(photo.file_path):
+                    # Create a unique key for each photo's container
+                    with st.container():
+                        # Display the image
+                        st.image(photo.file_path, use_column_width=True)
+                        
+                        # Create columns for date display and action buttons
+                        date_col, edit_col, delete_col = st.columns([4, 1, 1])
+                        
+                        with date_col:
+                            # Initialize session state for edit mode
+                            edit_key = f"edit_mode_{photo.id}"
+                            if edit_key not in st.session_state:
+                                st.session_state[edit_key] = False
+                            
+                            if st.session_state[edit_key]:
+                                # Show date input when in edit mode
+                                new_date = st.date_input(
+                                    "Edit Photo Date",
+                                    value=photo.photo_date.date(),
+                                    key=f"date_input_{photo.id}"
+                                )
+                                
+                                # Save button
+                                if st.button("Save", key=f"save_{photo.id}"):
+                                    photo.photo_date = datetime.combine(new_date, datetime.min.time())
+                                    db.commit()
+                                    st.session_state[edit_key] = False
+                                    st.rerun()
+                                
+                                # Cancel button
+                                if st.button("Cancel", key=f"cancel_{photo.id}"):
+                                    st.session_state[edit_key] = False
+                                    st.rerun()
+                            else:
+                                # Display current date when not in edit mode
+                                st.write(f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
+                        
+                        with edit_col:
+                            # Edit button
+                            if st.button("✏️", key=f"edit_button_{photo.id}"):
+                                st.session_state[f"edit_mode_{photo.id}"] = True
+                                st.rerun()
+                        
+                        with delete_col:
+                            # Delete button and confirmation handling
+                            delete_key = f"confirm_delete_{photo.id}"
+                            if delete_key not in st.session_state:
+                                st.session_state[delete_key] = False
+                            
+                            if not st.session_state[delete_key]:
+                                if st.button("🗑️", key=f"delete_{photo.id}"):
+                                    st.session_state[delete_key] = True
+                                    st.rerun()
+                            else:
+                                st.warning("Are you sure you want to delete this photo?")
+                                # Yes button
+                                if st.button("Yes", key=f"confirm_yes_{photo.id}"):
+                                    if os.path.exists(photo.file_path):
+                                        os.remove(photo.file_path)
+                                    db.delete(photo)
+                                    db.commit()
+                                    st.session_state[delete_key] = False
+                                    st.rerun()
+                                
+                                # No button
+                                if st.button("No", key=f"confirm_no_{photo.id}"):
+                                    st.session_state[delete_key] = False
+                                    st.rerun()
+                        
+                        # Add a separator between photos
                         st.markdown("---")
     finally:
         db.close()
@@ -455,7 +542,7 @@ def show_edit_tree_form(tree_id):
         db.close()
 
 def main():
-    st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="auto")
     
     with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
