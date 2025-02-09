@@ -5,6 +5,7 @@ from src.database import get_db, SessionLocal
 from src.models import Tree, TreeUpdate, Photo, Reminder, Species
 from datetime import datetime
 import os
+import pandas as pd
 from PIL import Image
 import PIL.ExifTags
 import glob
@@ -66,12 +67,96 @@ def save_uploaded_images(uploaded_files):
         image_paths.append(path)
     return image_paths
 
+def show_work_history(tree_id):
+    """Display work history, girth measurements, and reminders for a specific tree"""
+    db = SessionLocal()
+    try:
+        tree = db.query(Tree).filter(Tree.id == tree_id).first()
+        
+        # Back button at the top
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+            
+        st.header(f"Work History: {tree.tree_name} ({tree.tree_number})")
+        
+        # Growth History Chart in Expander
+        with st.expander("📈 Growth History"):
+            # Get all girth measurements from updates
+            measurements = db.query(TreeUpdate).filter(
+                TreeUpdate.tree_id == tree_id,
+                TreeUpdate.girth.isnot(None)
+            ).order_by(TreeUpdate.update_date).all()
+            
+            if measurements:
+                # Prepare data for chart
+                data = [{
+                    'date': update.update_date.strftime('%Y-%m-%d'),
+                    'girth': update.girth
+                } for update in measurements]
+                
+                # Create chart using Streamlit
+                import plotly.express as px
+                df = pd.DataFrame(data)
+                fig = px.line(df, x='date', y='girth', 
+                    title='Trunk Girth Over Time (cm)',
+                    markers=True)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No growth measurements recorded yet.")
+        
+        # Pending Reminders in Expander
+        with st.expander("⏰ Pending Reminders"):
+            pending_reminders = db.query(Reminder).filter(
+                Reminder.tree_id == tree_id,
+                Reminder.is_completed == 0,
+                Reminder.reminder_date >= datetime.now()
+            ).order_by(Reminder.reminder_date).all()
+            
+            if pending_reminders:
+                for reminder in pending_reminders:
+                    with st.container():
+                        col1, col2 = st.columns([1, 4])
+                        with col1:
+                            st.write(reminder.reminder_date.strftime('%Y-%m-%d'))
+                        with col2:
+                            st.write(reminder.message)
+                        st.markdown("---")
+            else:
+                st.info("No pending reminders.")
+        
+        # Work History List
+        st.subheader("Work History")
+        updates = db.query(TreeUpdate).filter(
+            TreeUpdate.tree_id == tree_id
+        ).order_by(TreeUpdate.update_date.desc()).all()
+        
+        if updates:
+            for update in updates:
+                with st.container():
+                    # Date and work description
+                    st.markdown(f"**{update.update_date.strftime('%Y-%m-%d')}**")
+                    st.write(update.work_performed)
+                    
+                    # Show girth measurement if available
+                    if update.girth:
+                        st.write(f"*Trunk Width: {update.girth} cm*")
+                    
+                    # Add separator between updates
+                    st.markdown("---")
+        else:
+            st.info("No work history recorded yet.")
+            
+    finally:
+        db.close()
+
 def create_tree_card(tree, db):
-    """Create a card display for a single tree with edit functionality"""
+    """Update create_tree_card function to include Work History button"""
     with st.container():
         with st.expander(f"**{tree.tree_name}**  \n*({tree.tree_number})*", expanded=False):
             # Create a row with tree name and buttons
-            col1, col2, col3 = st.columns([4, 2, 2])
+            col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
+            
             with col1:
                 st.write("")
             
@@ -86,6 +171,12 @@ def create_tree_card(tree, db):
                     tree.is_archived = 1
                     db.commit()
                     st.success(f"Tree {tree.tree_number} archived successfully!")
+                    st.rerun()
+            
+            with col4:
+                if st.button("📁", key=f"work_history_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Work History"
+                    st.session_state.selected_tree = tree.id
                     st.rerun()
             
             # Display the latest photo
@@ -111,11 +202,18 @@ def create_tree_card(tree, db):
                 st.write(f"**Updated:** {latest_update.update_date.strftime('%Y-%m-%d')}")
             
             # Action buttons in a single row
-            st.button("Add Update", key=f"update_{tree.id}", 
-                on_click=lambda: set_page_and_tree('Update Tree', tree.id))
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Add Update", key=f"update_{tree.id}"):
+                    st.session_state.page = "Update Tree"
+                    st.session_state.selected_tree = tree.id
+                    st.rerun()
             
-            st.button("Tree Gallery", key=f"gallery_{tree.id}", 
-                on_click=lambda: set_page_and_tree('Tree Gallery', tree.id))
+            with col2:
+                if st.button("Tree Gallery", key=f"gallery_{tree.id}"):
+                    st.session_state.page = "Tree Gallery"
+                    st.session_state.selected_tree = tree.id
+                    st.rerun()
 
 def set_page_and_tree(page, tree_id=None):
     """Helper function to set both page and selected tree"""
@@ -606,17 +704,11 @@ def main():
         st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=100)
         st.title("Bonsai Tracker")
         
-        # Navigation
-        navigation = st.radio(
-            "Navigation",
-            ["Active Trees", "Archived Trees"],
-            label_visibility="collapsed"
-        )
-        
-        if navigation == "Archived Trees":
-            st.session_state.page = "Archived Trees"
-        elif navigation == "Active Trees" and st.session_state.page == "Archived Trees":
-            st.session_state.page = "View Trees"
+        # Replace radio with a button for archived trees
+        if st.session_state.page != "Archived Trees":
+            if st.button("📦"):
+                st.session_state.page = "Archived Trees"
+                st.rerun()
     
     st.title("Bonsai Tracker")
     
@@ -644,6 +736,11 @@ def main():
             db.close()
     
     elif st.session_state.page == "Archived Trees":
+        # Add back button at the top
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+            
         show_archived_trees()
     
     elif st.session_state.page == "Add New Tree":
@@ -663,6 +760,9 @@ def main():
     
     elif st.session_state.page == "Edit Tree" and st.session_state.selected_tree:
         show_edit_tree_form(st.session_state.selected_tree)
+        
+    elif st.session_state.page == "Work History" and st.session_state.selected_tree:
+        show_work_history(st.session_state.selected_tree)
 
 if __name__ == "__main__":
     main()
