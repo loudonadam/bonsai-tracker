@@ -3,6 +3,7 @@
 import streamlit as st
 from src.database import get_db, SessionLocal
 from src.models import Tree, TreeUpdate, Photo, Reminder, Species
+from sqlalchemy import func, desc
 from datetime import datetime
 import os
 import pandas as pd
@@ -757,7 +758,7 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=100)
+        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
         st.title("Bonsai Tracker")
         
         # Replace radio with a button for archived trees
@@ -778,15 +779,33 @@ def main():
         
         db = SessionLocal()
         try:
-            trees = db.query(Tree).filter(Tree.is_archived == 0).all()
+            # Query trees with their latest update dates
+            trees_with_updates = (
+                db.query(
+                    Tree,
+                    # Get the most recent update date for each tree
+                    func.max(TreeUpdate.update_date).label('latest_update')
+                )
+                .outerjoin(TreeUpdate)  # Outer join to include trees with no updates
+                .filter(Tree.is_archived == 0)
+                .group_by(Tree.id)
+                .order_by(
+                    # Sort by latest update date descending, nulls last
+                    func.coalesce(func.max(TreeUpdate.update_date), 
+                                datetime(1900, 1, 1)).desc()
+                )
+                .all()
+            )
+            
+            # Extract just the tree objects in the correct order
+            trees = [tree for tree, _ in trees_with_updates]
             
             if trees:
-                # Alternative approach using Streamlit's built-in responsive layout
-                col_count = 4  # Maximum number of columns
+                # Create grid layout
+                col_count = 4
                 cols = st.columns(col_count)
                 for idx, tree in enumerate(trees):
                     with cols[idx % col_count]:
-                        # Make the card container responsive
                         with st.container():
                             create_tree_card(tree, db)
         finally:
