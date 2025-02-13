@@ -68,6 +68,7 @@ class Photo(Base):
     photo_date = Column(DateTime, nullable=False)  # Date photo was taken
     upload_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     description = Column(Text)
+    is_starred = Column(Integer, default=0)  # New column: 0 = not starred, 1 = starred
     
     # Relationships
     tree = relationship("Tree", back_populates="photos")

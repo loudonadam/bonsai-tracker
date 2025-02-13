@@ -150,46 +150,70 @@ def show_work_history(tree_id):
     finally:
         db.close()
 
+def create_responsive_grid(trees, db):
+    """Creates a responsive grid layout that adjusts based on container width"""
+    # We'll use container width classes from streamlit
+    container_width = st.get_container_width() if hasattr(st, 'get_container_width') else None
+    
+    # Default to 1 column for mobile-first approach
+    num_cols = 1
+    
+    # Create columns based on available width
+    for i in range(0, len(trees), num_cols):
+        # Create a row using columns
+        cols = st.columns(num_cols)
+        
+        # Fill each column in the row
+        for j in range(num_cols):
+            idx = i + j
+            if idx < len(trees):
+                with cols[j]:
+                    create_tree_card(trees[idx], db)
+
 def create_tree_card(tree, db):
-    """Update create_tree_card function to include Work History button"""
+    """Update create_tree_card function with more responsive layout"""
     with st.container():
         with st.expander(f"**{tree.tree_name}**  \n*({tree.tree_number})*", expanded=False):
-            # Create a row with tree name and buttons
-            col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
+            # Make buttons more touch-friendly on mobile
+            button_cols = st.columns([1, 1, 1])
             
-            with col1:
-                st.write("")
-            
-            with col2:
-                if st.button(f"✏️", key=f"edit_{tree.id}", use_container_width=True):
+            with button_cols[0]:
+                if st.button(f"✏️ Edit", key=f"edit_{tree.id}", use_container_width=True):
                     st.session_state.page = "Edit Tree"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
-            with col3:
-                if st.button("📦", key=f"archive_{tree.id}", use_container_width=True):
+            with button_cols[1]:
+                if st.button("📦 Archive", key=f"archive_{tree.id}", use_container_width=True):
                     tree.is_archived = 1
                     db.commit()
                     st.success(f"Tree {tree.tree_number} archived successfully!")
                     st.rerun()
             
-            with col4:
-                if st.button("📁", key=f"work_history_{tree.id}", use_container_width=True):
+            with button_cols[2]:
+                if st.button("📁 History", key=f"work_history_{tree.id}", use_container_width=True):
                     st.session_state.page = "Work History"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
-            # Display the latest photo
-            latest_photo = db.query(Photo).filter(
-                Photo.tree_id == tree.id
-            ).order_by(Photo.photo_date.desc()).first()
+            # Image handling
+            display_photo = (
+                db.query(Photo)
+                .filter(Photo.tree_id == tree.id, Photo.is_starred == 1)
+                .first()
+                or
+                db.query(Photo)
+                .filter(Photo.tree_id == tree.id)
+                .order_by(Photo.photo_date.desc())
+                .first()
+            )
             
-            if latest_photo and os.path.exists(latest_photo.file_path):
-                st.image(latest_photo.file_path, width=200, use_column_width=True)
+            if display_photo and os.path.exists(display_photo.file_path):
+                st.image(display_photo.file_path, use_column_width=True)
             else:
-                st.image("https://via.placeholder.com/150", width=200)
+                st.image("https://via.placeholder.com/150", use_column_width=True)
             
-            # Display tree information
+            # Rest of the card content...
             if tree.notes:
                 st.write("**Note:**", tree.notes)
             
@@ -269,7 +293,7 @@ def show_tree_gallery(tree_id):
                         st.image(photo.file_path, use_column_width=True)
                         
                         # Create columns for date display and action buttons
-                        date_col, edit_col, delete_col = st.columns([10, 1, 1])
+                        date_col, edit_col, star_col, delete_col = st.columns([8, 1, 1, 1])
                         
                         with date_col:
                             # Initialize session state for edit mode
@@ -306,6 +330,21 @@ def show_tree_gallery(tree_id):
                                 st.session_state[f"edit_mode_{photo.id}"] = True
                                 st.rerun()
                         
+                        with star_col:
+                            # Star/unstar button
+                            star_icon = "⭐" if photo.is_starred else "☆"
+                            if st.button(star_icon, key=f"star_{photo.id}"):
+                                # Unstar all other photos for this tree
+                                if not photo.is_starred:
+                                    db.query(Photo).filter(
+                                        Photo.tree_id == tree_id,
+                                        Photo.id != photo.id
+                                    ).update({"is_starred": 0})
+                                # Toggle star status for this photo
+                                photo.is_starred = 1 - photo.is_starred
+                                db.commit()
+                                st.rerun()
+                        
                         with delete_col:
                             # Delete button and confirmation handling
                             delete_key = f"confirm_delete_{photo.id}"
@@ -336,7 +375,7 @@ def show_tree_gallery(tree_id):
                         st.markdown("---")
     finally:
         db.close()
-
+        
 def show_update_form(tree_id):
     """Display the update form for a specific tree"""
     db = SessionLocal()
@@ -363,14 +402,30 @@ def show_update_form(tree_id):
         )
 
         with st.form(f"tree_update_form_{tree_id}"):
-            current_girth = st.number_input("New Trunk Width (cm)", 
-                value=tree.current_girth if tree.current_girth else 0.0,
-                step=0.1)
+            # Create columns for date and girth inputs
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                current_girth = st.number_input(
+                    "New Trunk Width (cm)", 
+                    value=tree.current_girth if tree.current_girth else 0.0,
+                    step=0.1
+                )
+            
+            with col2:
+                update_date = st.date_input(
+                    "Update Date",
+                    value=datetime.now().date(),
+                    help="Date when this work was performed"
+                )
             
             work_description = st.text_area("Work Performed")
             
-            uploaded_files = st.file_uploader("Add Photos", 
-                type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+            uploaded_files = st.file_uploader(
+                "Add Photos", 
+                type=['png', 'jpg', 'jpeg'],
+                accept_multiple_files=True
+            )
             
             # Show reminder fields based on checkbox state
             if st.session_state[session_key]:
@@ -386,9 +441,10 @@ def show_update_form(tree_id):
                     st.error("Please fill in both reminder fields when setting a reminder")
                     st.rerun()
                 
-                # Create tree update
+                # Create tree update with specified date
                 update = TreeUpdate(
                     tree_id=tree_id,
+                    update_date=datetime.combine(update_date, datetime.min.time()),
                     girth=current_girth,
                     work_performed=work_description
                 )
@@ -716,22 +772,23 @@ def main():
     if st.session_state.page == "View Trees":
         st.header("Your Bonsai Collection")
         
-        # Add New Tree button at the top
         if st.button("➕ Add New Tree"):
             st.session_state.page = "Add New Tree"
             st.rerun()
         
         db = SessionLocal()
         try:
-            # Only show active (non-archived) trees
             trees = db.query(Tree).filter(Tree.is_archived == 0).all()
             
-            # Create grid layout
             if trees:
-                cols = st.columns(4)
+                # Alternative approach using Streamlit's built-in responsive layout
+                col_count = 4  # Maximum number of columns
+                cols = st.columns(col_count)
                 for idx, tree in enumerate(trees):
-                    with cols[idx % 4]:
-                        create_tree_card(tree, db)
+                    with cols[idx % col_count]:
+                        # Make the card container responsive
+                        with st.container():
+                            create_tree_card(tree, db)
         finally:
             db.close()
     
