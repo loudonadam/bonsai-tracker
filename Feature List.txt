@@ -1,9 +1,0 @@
-Feature List:
-- Grid layout with cards displaying of all trees I have saved. The final card should be an empty card which I can click to add a new trees
-- Each card should show the tree name, tree number, and thumbnail of the feature photo
-- If I click a card for an existing tree, it should expand to show additional information like the "Special Note" and most recent update. Upon expanding there should also be a button shown called "Add Update". 
-- When clicking the "Add Update" button, it should open up a view where I can update the Trunk Width, add a picture, add a free text description of work done on the tree, or optionally create a reminded which will give me a notification and custom message on the selected date.
-- If I add a new photo, that photo should be saved to that tree with a "Photo Date" which is taken from the metadata. I would like to be able to add multiple photos at once, each would be assigned a "Photo Date" automatically.
-- I should also have a button called "Tree Gallery" which will display all of the photos of that tree which I have saved in chronological order with dates.
-- Store a chronology of notes taken, pictures taken, tree species, a single "Special Note" which I can edit after I click into a tree, trunk width (current and over time), etc.
-- When I add a new tree, I would like it to use a list of all trees I have entered for possible Species which autopopulate, but also leave an option to "Add new species" if it's one I haven't worked with yet.

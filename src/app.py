@@ -744,6 +744,60 @@ def show_edit_tree_form(tree_id):
     finally:
         db.close()
 
+def get_pending_reminders(db):
+    """Get reminders that are due or overdue and not yet completed"""
+    today = datetime.now().date()
+    pending_reminders = db.query(Reminder, Tree).join(Tree).filter(
+        Reminder.reminder_date <= today,
+        Reminder.is_completed == 0
+    ).all()
+    return pending_reminders
+
+def show_reminder_popup():
+    """Check for and display pending reminders when app starts"""
+    # Only run this once at startup
+    if 'reminders_checked' not in st.session_state:
+        st.session_state.reminders_checked = False
+        
+        db = SessionLocal()
+        try:
+            pending_reminders = get_pending_reminders(db)
+            
+            if pending_reminders:
+                # Initialize checkbox states
+                for reminder, _ in pending_reminders:
+                    if f"reminder_{reminder.id}" not in st.session_state:
+                        st.session_state[f"reminder_{reminder.id}"] = False
+                
+                # Create a dialog using a container with custom styling
+                with st.container(key="reminder_popup",border=True):
+                    st.subheader("📅 Pending Reminders")
+                    
+                    # Add a form to handle the checkboxes
+                    with st.form(key="reminder_form"):
+                        for reminder, tree in pending_reminders:
+                            reminder_key = f"reminder_{reminder.id}"
+                            st.checkbox(
+                                f"{tree.tree_name} ({tree.tree_number}): {reminder.message} - Due: {reminder.reminder_date.strftime('%Y-%m-%d')}",
+                                key=reminder_key
+                            )
+                        
+                        # Submit button to process checked reminders
+                        if st.form_submit_button("Mark Selected as Complete"):
+                            for reminder, _ in pending_reminders:
+                                if st.session_state[f"reminder_{reminder.id}"]:
+                                    reminder.is_completed = 1
+                                    db.commit()
+                            st.session_state.reminders_checked = True
+                            st.rerun()
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.session_state.reminders_checked = True
+                
+        finally:
+            db.close()
+
 def main():
     st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="auto")
     
@@ -755,6 +809,8 @@ def main():
         st.session_state.page = "View Trees"
     if 'selected_tree' not in st.session_state:
         st.session_state.selected_tree = None
+    
+    show_reminder_popup()
     
     # Sidebar
     with st.sidebar:
