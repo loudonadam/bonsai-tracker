@@ -1,4 +1,4 @@
-button[title="View fullscreen"] {
+button[aria-label="Fullscreen"] {
     display: none;
   }
 
@@ -71,15 +71,6 @@ div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
     border: 1px solid #dee2e6;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
-
-
-
-
-
-/* All this stuff is unchecked*/
-
-  /* Base styles to match Raleway font and colors */
-@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;600&display=swap');
 
 
 h1, h2, h3, h4, h5, h6 {

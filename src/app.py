@@ -179,21 +179,20 @@ def create_tree_card(tree, db):
             button_cols = st.columns([1, 1, 1])
             
             with button_cols[0]:
-                if st.button(f"✏️ Edit", key=f"edit_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Edit Tree"
+                if st.button("Gallery", key=f"gallery_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Tree Gallery"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
             with button_cols[1]:
-                if st.button("📦 Archive", key=f"archive_{tree.id}", use_container_width=True):
-                    tree.is_archived = 1
-                    db.commit()
-                    st.success(f"Tree {tree.tree_number} archived successfully!")
+                if st.button("History", key=f"work_history_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Work History"
+                    st.session_state.selected_tree = tree.id
                     st.rerun()
             
             with button_cols[2]:
-                if st.button("📁 History", key=f"work_history_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Work History"
+                if st.button("Add Update", key=f"update_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Update Tree"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
@@ -210,9 +209,9 @@ def create_tree_card(tree, db):
             )
             
             if display_photo and os.path.exists(display_photo.file_path):
-                st.image(display_photo.file_path, use_column_width=True)
+                st.image(display_photo.file_path, use_container_width =True)
             else:
-                st.image("https://via.placeholder.com/150", use_column_width=True)
+                st.image("https://via.placeholder.com/150", use_container_width =True)
             
             # Rest of the card content...
             if tree.notes:
@@ -227,18 +226,19 @@ def create_tree_card(tree, db):
                 st.write(f"**Updated:** {latest_update.update_date.strftime('%Y-%m-%d')}")
             
             # Action buttons in a single row
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns([2, 3, 2])
             with col1:
-                if st.button("Add Update", key=f"update_{tree.id}"):
-                    st.session_state.page = "Update Tree"
+                if st.button(f"Edit", key=f"edit_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Edit Tree"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
-            
-            with col2:
-                if st.button("Tree Gallery", key=f"gallery_{tree.id}"):
-                    st.session_state.page = "Tree Gallery"
-                    st.session_state.selected_tree = tree.id
+            with col3:
+                if st.button("Archive", key=f"archive_{tree.id}", use_container_width=True):
+                    tree.is_archived = 1
+                    db.commit()
+                    st.success(f"Tree {tree.tree_number} archived successfully!")
                     st.rerun()
+                
 
 def set_page_and_tree(page, tree_id=None):
     """Helper function to set both page and selected tree"""
@@ -291,10 +291,26 @@ def show_tree_gallery(tree_id):
                     # Create a unique key for each photo's container
                     with st.container():
                         # Display the image
-                        st.image(photo.file_path, use_column_width=True)
+                        # Star/unstar button
+                        star_icon = "⭐" if photo.is_starred else "☆"
+                        col0, col1 = st.columns([10, 1])
+                        
+                        with col1:
+                            if st.button(star_icon, key=f"star_{photo.id}", use_container_width=True, type = "secondary"):
+                                # Unstar all other photos for this tree
+                                if not photo.is_starred:
+                                    db.query(Photo).filter(
+                                        Photo.tree_id == tree_id,
+                                        Photo.id != photo.id
+                                    ).update({"is_starred": 0})
+                                # Toggle star status for this photo
+                                photo.is_starred = 1 - photo.is_starred
+                                db.commit()
+                                st.rerun()
+                        st.image(photo.file_path, use_container_width =True)
                         
                         # Create columns for date display and action buttons
-                        date_col, edit_col, star_col, delete_col = st.columns([8, 1, 1, 1])
+                        date_col, edit_col, delete_col = st.columns([10, 2, 2])
                         
                         with date_col:
                             # Initialize session state for edit mode
@@ -327,23 +343,8 @@ def show_tree_gallery(tree_id):
                         
                         with edit_col:
                             # Edit button
-                            if st.button("✏️", key=f"edit_button_{photo.id}"):
+                            if st.button("Edit Date", key=f"edit_button_{photo.id}"):
                                 st.session_state[f"edit_mode_{photo.id}"] = True
-                                st.rerun()
-                        
-                        with star_col:
-                            # Star/unstar button
-                            star_icon = "⭐" if photo.is_starred else "☆"
-                            if st.button(star_icon, key=f"star_{photo.id}"):
-                                # Unstar all other photos for this tree
-                                if not photo.is_starred:
-                                    db.query(Photo).filter(
-                                        Photo.tree_id == tree_id,
-                                        Photo.id != photo.id
-                                    ).update({"is_starred": 0})
-                                # Toggle star status for this photo
-                                photo.is_starred = 1 - photo.is_starred
-                                db.commit()
                                 st.rerun()
                         
                         with delete_col:
@@ -353,7 +354,7 @@ def show_tree_gallery(tree_id):
                                 st.session_state[delete_key] = False
                             
                             if not st.session_state[delete_key]:
-                                if st.button("🗑️", key=f"delete_{photo.id}"):
+                                if st.button("Delete", key=f"delete_{photo.id}"):
                                     st.session_state[delete_key] = True
                                     st.rerun()
                             else:
@@ -822,8 +823,6 @@ def main():
             if st.button("📦"):
                 st.session_state.page = "Archived Trees"
                 st.rerun()
-    
-    st.title("Bonsai Tracker")
     
     # Main content
     if st.session_state.page == "View Trees":
