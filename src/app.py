@@ -10,6 +10,142 @@ import pandas as pd
 from PIL import Image
 import PIL.ExifTags
 import glob
+import shutil
+import json
+from zipfile import ZipFile
+
+def export_bonsai_data(db, export_dir="exports"):
+    """
+    Export all bonsai data and images to a structured directory
+    
+    Parameters:
+    db (SessionLocal): Database session
+    export_dir (str): Base directory for exports
+    
+    Returns:
+    str: Path to the created zip file
+    """
+    # Create timestamp for unique export
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    export_path = os.path.join(export_dir, f"bonsai_export_{timestamp}")
+    os.makedirs(export_path, exist_ok=True)
+    
+    # Create images directory
+    images_path = os.path.join(export_path, "images")
+    os.makedirs(images_path, exist_ok=True)
+    
+    # Export tree data
+    trees_data = []
+    for tree in db.query(Tree).all():
+        tree_data = {
+            "tree_number": tree.tree_number,
+            "tree_name": tree.tree_name,
+            "species": tree.species_info.name,
+            "date_acquired": tree.date_acquired.isoformat(),
+            "origin_date": tree.origin_date.isoformat(),
+            "current_girth": tree.current_girth,
+            "notes": tree.notes,
+            "is_archived": tree.is_archived,
+            "training_age": tree.training_age,
+            "true_age": tree.true_age,
+            
+            # Include related data
+            "updates": [{
+                "date": update.update_date.isoformat(),
+                "girth": update.girth,
+                "work_performed": update.work_performed
+            } for update in tree.updates],
+            
+            "photos": [{
+                "file_name": os.path.basename(photo.file_path),
+                "photo_date": photo.photo_date.isoformat(),
+                "description": photo.description,
+                "is_starred": photo.is_starred
+            } for photo in tree.photos],
+            
+            "reminders": [{
+                "date": reminder.reminder_date.isoformat(),
+                "message": reminder.message,
+                "is_completed": reminder.is_completed
+            } for reminder in tree.reminders]
+        }
+        trees_data.append(tree_data)
+        
+        # Copy tree images
+        tree_images_path = os.path.join(images_path, tree.tree_number)
+        os.makedirs(tree_images_path, exist_ok=True)
+        
+        for photo in tree.photos:
+            if os.path.exists(photo.file_path):
+                # Create filename with photo date
+                photo_date = photo.photo_date.strftime("%Y%m%d")
+                file_ext = os.path.splitext(photo.file_path)[1]
+                new_filename = f"{photo_date}{file_ext}"
+                
+                # Copy image to export directory
+                shutil.copy2(
+                    photo.file_path,
+                    os.path.join(tree_images_path, new_filename)
+                )
+    
+    # Save JSON data
+    with open(os.path.join(export_path, "trees_data.json"), 'w', encoding='utf-8') as f:
+        json.dump(trees_data, f, indent=2, ensure_ascii=False)
+    
+    # Create Excel export with multiple sheets
+    with pd.ExcelWriter(os.path.join(export_path, "bonsai_collection.xlsx")) as writer:
+        # Trees overview
+        trees_df = pd.DataFrame([{
+            "Tree Number": t["tree_number"],
+            "Name": t["tree_name"],
+            "Species": t["species"],
+            "Date Acquired": t["date_acquired"],
+            "Current Girth (cm)": t["current_girth"],
+            "Training Age (years)": round(t["training_age"], 1),
+            "True Age (years)": round(t["true_age"], 1),
+            "Status": "Archived" if t["is_archived"] else "Active"
+        } for t in trees_data])
+        trees_df.to_excel(writer, sheet_name="Trees Overview", index=False)
+        
+        # Work history
+        updates_data = []
+        for tree in trees_data:
+            for update in tree["updates"]:
+                updates_data.append({
+                    "Tree Number": tree["tree_number"],
+                    "Tree Name": tree["tree_name"],
+                    "Date": update["date"],
+                    "Girth (cm)": update["girth"],
+                    "Work Performed": update["work_performed"]
+                })
+        pd.DataFrame(updates_data).to_excel(writer, sheet_name="Work History", index=False)
+        
+        # Reminders
+        reminders_data = []
+        for tree in trees_data:
+            for reminder in tree["reminders"]:
+                reminders_data.append({
+                    "Tree Number": tree["tree_number"],
+                    "Tree Name": tree["tree_name"],
+                    "Date": reminder["date"],
+                    "Message": reminder["message"],
+                    "Status": "Completed" if reminder["is_completed"] else "Pending"
+                })
+        pd.DataFrame(reminders_data).to_excel(writer, sheet_name="Reminders", index=False)
+    
+    # Create zip file
+    zip_path = f"{export_path}.zip"
+    with ZipFile(zip_path, 'w') as zipf:
+        for root, dirs, files in os.walk(export_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, export_path)
+                zipf.write(file_path, arcname)
+    
+    # Clean up temporary export directory
+    shutil.rmtree(export_path)
+    
+    return zip_path
 
 def get_exif_date(image_path):
     """Extract date from image EXIF data if available"""
@@ -805,6 +941,12 @@ def main():
     with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     
+    #button font
+
+    st.markdown("""
+    <link href="https://fonts.googleapis.com/css2?family=Kdam+Thmor+Pro&family=Roboto:wght@500&display=swap" rel="stylesheet">
+    """, unsafe_allow_html=True)
+    
     # Initialize session state
     if 'page' not in st.session_state:
         st.session_state.page = "View Trees"
@@ -818,11 +960,50 @@ def main():
         st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
         st.title("Bonsai Tracker")
         
-        # Replace radio with a button for archived trees
-        if st.session_state.page != "Archived Trees":
-            if st.button("📦"):
-                st.session_state.page = "Archived Trees"
-                st.rerun()
+        #adding spacing for the archive and export buttons
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+            
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            # Replace radio with a button for archived trees
+            if st.session_state.page != "Archived Trees":
+                if st.button("Archive", use_container_width=True):
+                    st.session_state.page = "Archived Trees"
+                    st.rerun()
+                
+        with col2:
+            # Add export button to sidebar
+            if st.button("Export", use_container_width=True):
+                with st.spinner("Preparing export..."):
+                    try:
+                        db = SessionLocal()
+                        export_path = export_bonsai_data(db)
+                        
+                        # Create download button
+                        with open(export_path, "rb") as f:
+                            st.download_button(
+                                label="Download Export",
+                                data=f,
+                                file_name=os.path.basename(export_path),
+                                mime="application/zip"
+                            )
+                        
+                        # Clean up zip file after download button is created
+                        os.remove(export_path)
+                        
+                    except Exception as e:
+                        st.error(f"Export failed: {str(e)}")
+                    finally:
+                        db.close()
     
     # Main content
     if st.session_state.page == "View Trees":

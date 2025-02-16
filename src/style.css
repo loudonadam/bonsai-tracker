@@ -15,6 +15,23 @@ div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
     margin-bottom: 1rem;
 }
 
+/* font stylings and selectors */
+#your-bonsai-collection {
+    font-family: "Kdam Thmor Pro", serif;
+    font-weight: 400;
+    font-style: normal;
+}
+
+button > div > p {
+    font-family: "Roboto", serif;
+    font-optical-sizing: auto;
+    font-weight: 500;
+    font-style: normal;
+    font-variation-settings:
+        "wdth" 100;
+    color: #333;
+}
+
 /* sidebar styling */
 .st-emotion-cache-1gv3huu {
     width: auto;
@@ -29,7 +46,6 @@ div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
 /* Button styling */
 .stButton > button {
     background-color: #FAFAFA;
-    color: #A5D6A7;
     border-radius: 5px;
     padding: 0.5rem 1rem;
     font-family: 'Raleway', sans-serif;
@@ -70,11 +86,4 @@ div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
     margin-bottom: 20px;
     border: 1px solid #dee2e6;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-
-h1, h2, h3, h4, h5, h6 {
-    font-family: 'Raleway', sans-serif;
-    font-weight: 600;
-    color: #333;
 }
