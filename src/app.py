@@ -413,109 +413,106 @@ def show_tree_gallery(tree_id):
             st.session_state.gallery_initialized = False
             st.rerun()
         
-        col1, col2, col3 = st.columns([1, 6, 2])
+        
+        
+        st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
+            
+        photos = db.query(Photo).filter(
+            Photo.tree_id == tree_id
+        ).order_by(Photo.photo_date).all()
+        
+        # No photos message
+        if not photos:
+            st.info("No photos available for this tree.")
+            return
+        
+        col1, col2, col3 = st.columns([1, 8, 6])
+        
         with col2:
-            st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
-            
-            photos = db.query(Photo).filter(
-                Photo.tree_id == tree_id
-            ).order_by(Photo.photo_date).all()
-            
-            # No photos message
-            if not photos:
-                st.info("No photos available for this tree.")
-                return
-            
             # Photo display loop
             for photo in photos:
+                tree_galler_grid = grid([8,1],1,[10,2,2])
                 if os.path.exists(photo.file_path):
+                    tree_galler_grid.write("")
                     # Create a unique key for each photo's container
-                    with st.container():
+                    with tree_galler_grid.container():
                         # Display the image
                         # Star/unstar button
                         star_icon = "⭐" if photo.is_starred else "☆"
-                        col0, col1 = st.columns([10, 1])
-                        
-                        with col1:
-                            if st.button(star_icon, key=f"star_{photo.id}", use_container_width=True, type = "secondary"):
-                                # Unstar all other photos for this tree
-                                if not photo.is_starred:
-                                    db.query(Photo).filter(
-                                        Photo.tree_id == tree_id,
-                                        Photo.id != photo.id
-                                    ).update({"is_starred": 0})
-                                # Toggle star status for this photo
-                                photo.is_starred = 1 - photo.is_starred
-                                db.commit()
-                                st.rerun()
-                        st.image(photo.file_path, use_container_width =True)
-                        
-                        # Create columns for date display and action buttons
-                        date_col, edit_col, delete_col = st.columns([10, 2, 2])
-                        
-                        with date_col:
-                            # Initialize session state for edit mode
-                            edit_key = f"edit_mode_{photo.id}"
-                            if edit_key not in st.session_state:
-                                st.session_state[edit_key] = False
+                        if st.button(star_icon, key=f"star_{photo.id}", use_container_width=True, type = "secondary"):
+                            # Unstar all other photos for this tree
+                            if not photo.is_starred:
+                                db.query(Photo).filter(
+                                    Photo.tree_id == tree_id,
+                                    Photo.id != photo.id
+                                ).update({"is_starred": 0})
+                            # Toggle star status for this photo
+                            photo.is_starred = 1 - photo.is_starred
+                            db.commit()
+                            st.rerun()
+                    tree_galler_grid.image(photo.file_path, use_container_width =True)
                             
-                            if st.session_state[edit_key]:
-                                # Show date input when in edit mode
-                                new_date = st.date_input(
-                                    "Edit Photo Date",
-                                    value=photo.photo_date.date(),
-                                    key=f"date_input_{photo.id}"
-                                )
-                                
-                                # Save button
-                                if st.button("Save", key=f"save_{photo.id}"):
-                                    photo.photo_date = datetime.combine(new_date, datetime.min.time())
-                                    db.commit()
-                                    st.session_state[edit_key] = False
-                                    st.rerun()
-                                
-                                # Cancel button
-                                if st.button("Cancel", key=f"cancel_{photo.id}"):
-                                    st.session_state[edit_key] = False
-                                    st.rerun()
-                            else:
-                                # Display current date when not in edit mode
-                                st.write(f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
+                    # Initialize session state for edit mode
+                    edit_key = f"edit_mode_{photo.id}"
+                    if edit_key not in st.session_state:
+                        st.session_state[edit_key] = False
+                    
+                    if st.session_state[edit_key]:
+                        # Show date input when in edit mode
+                        new_date = tree_galler_grid.date_input(
+                            "Edit Photo Date",
+                            value=photo.photo_date.date(),
+                            key=f"date_input_{photo.id}"
+                        )
                         
-                        with edit_col:
-                            # Edit button
-                            if st.button("Edit Date", key=f"edit_button_{photo.id}"):
-                                st.session_state[f"edit_mode_{photo.id}"] = True
-                                st.rerun()
+                        # Save button
+                        if st.button("Save", key=f"save_{photo.id}"):
+                            photo.photo_date = datetime.combine(new_date, datetime.min.time())
+                            db.commit()
+                            st.session_state[edit_key] = False
+                            st.rerun()
                         
-                        with delete_col:
-                            # Delete button and confirmation handling
-                            delete_key = f"confirm_delete_{photo.id}"
-                            if delete_key not in st.session_state:
-                                st.session_state[delete_key] = False
-                            
-                            if not st.session_state[delete_key]:
-                                if st.button("Delete", key=f"delete_{photo.id}"):
-                                    st.session_state[delete_key] = True
-                                    st.rerun()
-                            else:
-                                st.warning("Are you sure you want to delete this photo?")
-                                # Yes button
-                                if st.button("Yes", key=f"confirm_yes_{photo.id}"):
-                                    if os.path.exists(photo.file_path):
-                                        os.remove(photo.file_path)
-                                    db.delete(photo)
-                                    db.commit()
-                                    st.session_state[delete_key] = False
-                                    st.rerun()
-                                
-                                # No button
-                                if st.button("No", key=f"confirm_no_{photo.id}"):
-                                    st.session_state[delete_key] = False
-                                    st.rerun()
+                        # Cancel button
+                        if st.button("Cancel", key=f"cancel_{photo.id}"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+                    else:
+                        # Display current date when not in edit mode
+                        tree_galler_grid.write(f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
+                    
+
+                    if tree_galler_grid.button("Edit Date", key=f"edit_button_{photo.id}"):
+                        st.session_state[f"edit_mode_{photo.id}"] = True
+                        st.rerun()
+                    
+
+                    # Delete button and confirmation handling
+                    delete_key = f"confirm_delete_{photo.id}"
+                    if delete_key not in st.session_state:
+                        st.session_state[delete_key] = False
+                    
+                    if not st.session_state[delete_key]:
+                        if tree_galler_grid.button("Delete", key=f"delete_{photo.id}"):
+                            st.session_state[delete_key] = True
+                            st.rerun()
+                    else:
+                        st.warning("Are you sure you want to delete this photo?")
+                        # Yes button
+                        if st.button("Yes", key=f"confirm_yes_{photo.id}"):
+                            if os.path.exists(photo.file_path):
+                                os.remove(photo.file_path)
+                            db.delete(photo)
+                            db.commit()
+                            st.session_state[delete_key] = False
+                            st.rerun()
                         
-                        # Add a separator between photos
-                        st.markdown("---")
+                        # No button
+                        if st.button("No", key=f"confirm_no_{photo.id}"):
+                            st.session_state[delete_key] = False
+                            st.rerun()
+                    
+                    # Add a separator between photos
+                    st.markdown("---")
     finally:
         db.close()
         
@@ -968,60 +965,58 @@ def get_or_create_settings(db):
 
 def show_settings_form():
     """Display and handle the settings form"""
-    st.header("Customize App Settings")
     
-    db = SessionLocal()
-    try:
-        settings = get_or_create_settings(db)
+    col1, col2, col3 = st.columns([1, 10, 5])
         
-        with st.form("settings_form"):
-            # App title input
-            new_title = st.text_input(
-                "App Title",
-                value=settings.app_title,
-                help="Customize the application title shown in the sidebar"
-            )
+    with col2:
+        st.header("Customize Profile")
+        
+        db = SessionLocal()
+        try:
+            settings = get_or_create_settings(db)
             
-            # Logo upload
-            new_logo = st.file_uploader(
-                "Upload New Logo",
-                type=['png', 'jpg', 'jpeg'],
-                help="Upload a new logo image (recommended size: 125x125 pixels)"
-            )
             
-            if new_logo:
-                st.image(new_logo, width=125)
-            
-            if st.form_submit_button("Save Settings"):
-                try:
-                    settings.app_title = new_title
-                    
-                    if new_logo:
-                        logo_path = save_uploaded_logo(new_logo)
-                        settings.sidebar_image = logo_path
-                    
-                    db.commit()
-                    st.success("Settings updated successfully!")
-                    st.session_state.page = "View Trees"
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"Error saving settings: {str(e)}")
-    finally:
-        db.close()
+            with st.form("settings_form"):
+                # App title input
+                new_title = st.text_input(
+                    "Profile Name",
+                    value=settings.app_title,
+                    help="Customize the profile title shown in the sidebar"
+                )
+                
+                # Logo upload
+                new_logo = st.file_uploader(
+                    "Upload New Profile Image",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Upload a new logo image (recommended size: 125x125 pixels)"
+                )
+                
+                if new_logo:
+                    st.image(new_logo, width=125)
+                
+                if st.form_submit_button("Save Settings"):
+                    try:
+                        settings.app_title = new_title
+                        
+                        if new_logo:
+                            logo_path = save_uploaded_logo(new_logo)
+                            settings.sidebar_image = logo_path
+                        
+                        db.commit()
+                        st.success("Settings updated successfully!")
+                        st.session_state.page = "View Trees"
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error saving settings: {str(e)}")
+        finally:
+            db.close()
 
 def main():
     st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="auto")
     
     with open('C:\\Users\\loudo\\Desktop\\bonsai-tracker\\src\\style.css') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    
-    #button font
-
-    st.markdown("""
-    <link href="https://fonts.googleapis.com/css2?family=Kdam+Thmor+Pro&family=Roboto:wght@500&display=swap" rel="stylesheet">
-    """, unsafe_allow_html=True)
-    
     
     # Initialize session state
     if 'page' not in st.session_state:
@@ -1036,26 +1031,6 @@ def main():
         db = SessionLocal()
         try:
             settings = get_or_create_settings(db)
-            
-            st.markdown(
-                """
-                <style>
-                div [class="st-emotion-cache-4tlk2p egexzqm0"] {
-                    background-color: transparent;
-                    border: none;
-                    font-size: 1.5em; /* Adjust size if needed */
-                    padding: 0;
-                    margin: 0;
-                    gap: 0rem;
-                }
-                div.stButton > button:hover {
-                    background-color: rgba(0, 0, 0, 0.1); /* Optional hover effect */
-                    border-radius: 5px; /* Optional styling */
-                }
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
             
             # Add Settings button to sidebar
             if st.button("⚙️", key="settings"):
@@ -1189,6 +1164,12 @@ def main():
         
     elif st.session_state.page == "Work History" and st.session_state.selected_tree:
         show_work_history(st.session_state.selected_tree)
+        
+        
+    #button font
+    st.markdown("""
+    <link href="https://fonts.googleapis.com/css2?family=Kdam+Thmor+Pro&family=Roboto:wght@500&display=swap" rel="stylesheet">
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
