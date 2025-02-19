@@ -13,6 +13,11 @@ import glob
 import shutil
 import json
 from zipfile import ZipFile
+from streamlit_extras.bottom_container import bottom
+from streamlit_extras.stateful_button import button as state_button
+from streamlit_extras.stylable_container import stylable_container
+from streamlit_extras.grid import grid
+
 
 def export_bonsai_data(db, export_dir="exports"):
     """
@@ -957,32 +962,21 @@ def main():
     
     # Sidebar
     with st.sidebar:
+        
         st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
         st.title("Bonsai Tracker")
-        
-        #adding spacing for the archive and export buttons
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
             
         col1, col2 = st.columns([1, 1])
         with col1:
             # Replace radio with a button for archived trees
             if st.session_state.page != "Archived Trees":
-                if st.button("Archive", use_container_width=True):
+                if st.button("View Archive", use_container_width=True):
                     st.session_state.page = "Archived Trees"
                     st.rerun()
                 
         with col2:
             # Add export button to sidebar
-            if st.button("Export", use_container_width=True):
+            if state_button("Export Data", key="export",use_container_width=True):
                 with st.spinner("Preparing export..."):
                     try:
                         db = SessionLocal()
