@@ -1,10 +1,17 @@
-# create_settings_table.py
+# add_table.py
+import os
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
-from src.database import engine
+from sqlalchemy.orm import sessionmaker
+
+# Create database directory if it doesn't exist
+os.makedirs('data', exist_ok=True)
+
+# Use the same database path as in your application
+DATABASE_URL = "sqlite:///data/bonsai.db"
 
 # Create the engine
-engine = create_engine(engine)
+engine = create_engine(DATABASE_URL)
 
 # Create declarative base
 Base = declarative_base()
@@ -21,9 +28,11 @@ def main():
     # Create the table
     Base.metadata.create_all(engine)
     
+    # Create session
+    Session = sessionmaker(bind=engine)
+    
     # Create default settings
-    from sqlalchemy.orm import Session
-    with Session(engine) as session:
+    with Session() as session:
         # Check if settings already exist
         existing_settings = session.query(Settings).first()
         if not existing_settings:

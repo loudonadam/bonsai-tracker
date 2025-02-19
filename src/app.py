@@ -2,7 +2,7 @@
 # src/app.py
 import streamlit as st
 from src.database import get_db, SessionLocal
-from src.models import Tree, TreeUpdate, Photo, Reminder, Species
+from src.models import Tree, TreeUpdate, Photo, Reminder, Species, Settings
 from sqlalchemy import func, desc
 from datetime import datetime
 import os
@@ -940,6 +940,76 @@ def show_reminder_popup():
         finally:
             db.close()
 
+def save_uploaded_logo(uploaded_file):
+    """Save uploaded logo to the images directory"""
+    logo_dir = os.path.join('data', 'system')
+    os.makedirs(logo_dir, exist_ok=True)
+    
+    file_extension = os.path.splitext(uploaded_file.name)[1]
+    filename = f"logo{file_extension}"
+    file_path = os.path.join(logo_dir, filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+        
+    return file_path
+
+def get_or_create_settings(db):
+    """Get existing settings or create default ones"""
+    settings = db.query(Settings).first()
+    if not settings:
+        settings = Settings(
+            app_title="Bonsai Tracker",
+            sidebar_image="C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png"
+        )
+        db.add(settings)
+        db.commit()
+    return settings
+
+def show_settings_form():
+    """Display and handle the settings form"""
+    st.header("Customize App Settings")
+    
+    db = SessionLocal()
+    try:
+        settings = get_or_create_settings(db)
+        
+        with st.form("settings_form"):
+            # App title input
+            new_title = st.text_input(
+                "App Title",
+                value=settings.app_title,
+                help="Customize the application title shown in the sidebar"
+            )
+            
+            # Logo upload
+            new_logo = st.file_uploader(
+                "Upload New Logo",
+                type=['png', 'jpg', 'jpeg'],
+                help="Upload a new logo image (recommended size: 125x125 pixels)"
+            )
+            
+            if new_logo:
+                st.image(new_logo, width=125)
+            
+            if st.form_submit_button("Save Settings"):
+                try:
+                    settings.app_title = new_title
+                    
+                    if new_logo:
+                        logo_path = save_uploaded_logo(new_logo)
+                        settings.sidebar_image = logo_path
+                    
+                    db.commit()
+                    st.success("Settings updated successfully!")
+                    st.session_state.page = "View Trees"
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error saving settings: {str(e)}")
+    finally:
+        db.close()
+
 def main():
     st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="auto")
     
@@ -952,6 +1022,7 @@ def main():
     <link href="https://fonts.googleapis.com/css2?family=Kdam+Thmor+Pro&family=Roboto:wght@500&display=swap" rel="stylesheet">
     """, unsafe_allow_html=True)
     
+    
     # Initialize session state
     if 'page' not in st.session_state:
         st.session_state.page = "View Trees"
@@ -962,43 +1033,92 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        
-        st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
-        st.title("Bonsai Tracker")
+        db = SessionLocal()
+        try:
+            settings = get_or_create_settings(db)
             
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            # Replace radio with a button for archived trees
-            if st.session_state.page != "Archived Trees":
-                if st.button("View Archive", use_container_width=True):
-                    st.session_state.page = "Archived Trees"
-                    st.rerun()
-                
-        with col2:
-            # Add export button to sidebar
-            if state_button("Export Data", key="export",use_container_width=True):
-                with st.spinner("Preparing export..."):
-                    try:
-                        db = SessionLocal()
-                        export_path = export_bonsai_data(db)
-                        
-                        # Create download button
-                        with open(export_path, "rb") as f:
-                            st.download_button(
-                                label="Download Export",
-                                data=f,
-                                file_name=os.path.basename(export_path),
-                                mime="application/zip"
-                            )
-                        
-                        # Clean up zip file after download button is created
-                        os.remove(export_path)
-                        
-                    except Exception as e:
-                        st.error(f"Export failed: {str(e)}")
-                    finally:
-                        db.close()
-    
+            st.markdown(
+                """
+                <style>
+                div [class="st-emotion-cache-4tlk2p egexzqm0"] {
+                    background-color: transparent;
+                    border: none;
+                    font-size: 1.5em; /* Adjust size if needed */
+                    padding: 0;
+                    margin: 0;
+                    gap: 0rem;
+                }
+                div.stButton > button:hover {
+                    background-color: rgba(0, 0, 0, 0.1); /* Optional hover effect */
+                    border-radius: 5px; /* Optional styling */
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            
+            # Add Settings button to sidebar
+            if st.button("⚙️", key="settings"):
+                st.session_state.page = "Settings"
+                st.rerun()
+            
+            # Use custom logo if it exists and is valid
+            if settings.sidebar_image and os.path.exists(settings.sidebar_image):
+                st.image(settings.sidebar_image, use_container_width=True)
+            else:
+                # Fallback to default logo
+                st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
+            
+            # Use custom title
+            st.title(settings.app_title)
+            
+            
+
+
+        # Create a container to push buttons to the bottom
+            with st.container():
+                st.markdown('<div class="sidebar-bottom">', unsafe_allow_html=True)
+            
+                # Replace radio with a button for archived trees
+                if st.session_state.page != "Archived Trees":
+                    if st.button("View Archive", use_container_width=True):
+                        st.session_state.page = "Archived Trees"
+                        st.rerun()
+                    
+
+                # Add export button to sidebar
+                if state_button("Export Data", key="export",use_container_width=True):
+                    with st.spinner("Preparing export..."):
+                        try:
+                            db = SessionLocal()
+                            export_path = export_bonsai_data(db)
+                            
+                            # Create download button
+                            with open(export_path, "rb") as f:
+                                st.download_button(
+                                    label="Download Export",
+                                    data=f,
+                                    file_name=os.path.basename(export_path),
+                                    mime="application/zip"
+                                )
+                            
+                            # Clean up zip file after download button is created
+                            os.remove(export_path)
+                            
+                        except Exception as e:
+                            st.error(f"Export failed: {str(e)}")
+                        finally:
+                            db.close()
+                st.markdown('</div>', unsafe_allow_html=True)
+        finally:
+            db.close()
+            
+    if st.session_state.page == "Settings":
+        if st.button("← Back to Collection"):
+            st.session_state.page = "View Trees"
+            st.rerun()
+        show_settings_form()    
+
     # Main content
     if st.session_state.page == "View Trees":
         st.header("Your Bonsai Collection")

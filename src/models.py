@@ -5,6 +5,13 @@ from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
+class Settings(Base):
+    __tablename__ = 'settings'
+    
+    id = Column(Integer, primary_key=True)
+    app_title = Column(String, default="Bonsai Tracker")
+    sidebar_image = Column(String)
+
 class Species(Base):
     __tablename__ = 'species'
     

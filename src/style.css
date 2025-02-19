@@ -6,13 +6,21 @@ a[class="st-emotion-cache-yinll1 e1nzilvr3"] {
     display: none;
   }
 
+div[data-testid="stSidebarHeader"] {
+    height: 10px;
+    padding: 0px;
+  }
+.st-key-settings {
+    border: black;
+    gap: 0rem;
+  }  
+
 /* Container styling */
 div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
     background-color: #FAFAFA;
     padding: 1.5rem;
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 1rem;
 }
 
 /* font stylings and selectors */
@@ -32,24 +40,30 @@ button > div > p {
     color: #333;
 }
 
+
+
 /* sidebar styling */
 .st-emotion-cache-1gv3huu {
     width: auto;
     color: #8E5E4D;
     background-color: #8E5E4D;
-    padding: 1.5rem;
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 1rem;
 }
+
+
 
 /* Button styling */
 .stButton > button {
     background-color: #FAFAFA;
     border-radius: 5px;
-    padding: 0.5rem 1rem;
     font-family: 'Raleway', sans-serif;
     transition: background-color 0.2s;
+}
+
+.stButton > button.st-emotion-cache-zaw6nw{
+    border: none;
+    background-color: transparent;
 }
 
 @media (min-width: 768px) {
