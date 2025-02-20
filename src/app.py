@@ -186,21 +186,6 @@ def get_or_create_species(db, species_name):
         db.commit()
     return species
 
-def save_uploaded_image(uploaded_file):
-    """Save uploaded image to the images directory"""
-    image_dir = os.path.join('data', 'images')
-    os.makedirs(image_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_extension = os.path.splitext(uploaded_file.name)[1]
-    filename = f"tree_{timestamp}{file_extension}"
-    
-    file_path = os.path.join(image_dir, filename)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-        
-    return file_path
-
 def save_uploaded_images(uploaded_files):
     """Save multiple uploaded images and return their paths"""
     image_paths = []
@@ -912,12 +897,24 @@ def show_reminder_popup():
                 with st.container(key="reminder_popup",border=True):
                     st.subheader("📅 Pending Reminders")
                     
+                    st.markdown("""
+                                <style>
+                                    .stCheckbox label {
+                                        white-space: pre-line;
+                                    }
+                                </style>
+                            """, unsafe_allow_html=True)
+                    
                     # Add a form to handle the checkboxes
-                    with st.form(key="reminder_form"):
+                    with st.form(key="reminder_form",border=False):
                         for reminder, tree in pending_reminders:
                             reminder_key = f"reminder_{reminder.id}"
+                            # Add CSS to allow line breaks in checkbox labels
+                            
+
+                            # Create the checkbox with a newline separating the two lines
                             st.checkbox(
-                                f"{tree.tree_name} ({tree.tree_number}): {reminder.message} - Due: {reminder.reminder_date.strftime('%Y-%m-%d')}",
+                                f"**Due: {reminder.reminder_date.strftime('%Y-%m-%d')}** (*{tree.tree_name}*)\n{reminder.message}",
                                 key=reminder_key
                             )
                         
@@ -937,8 +934,73 @@ def show_reminder_popup():
         finally:
             db.close()
 
+def get_exif_orientation(image_path):
+    """Get the EXIF orientation tag from an image"""
+    try:
+        image = Image.open(image_path)
+        if hasattr(image, '_getexif'):  # Check if image has EXIF data
+            exif = image._getexif()
+            if exif:
+                # Find the orientation tag (274 is the standard tag for orientation)
+                for tag_id in PIL.ExifTags.TAGS:
+                    if PIL.ExifTags.TAGS[tag_id] == 'Orientation':
+                        orientation = exif.get(tag_id)
+                        return orientation
+    except:
+        pass
+    return 1  # Default orientation if no EXIF data found
+
+def fix_image_orientation(image_path):
+    """Fix image orientation based on EXIF data and save the corrected image"""
+    try:
+        image = Image.open(image_path)
+        if hasattr(image, '_getexif'):  # Check if image has EXIF data
+            orientation = get_exif_orientation(image_path)
+            
+            # Rotate or flip based on EXIF orientation tag
+            if orientation == 2:
+                image = image.transpose(Image.FLIP_LEFT_RIGHT)
+            elif orientation == 3:
+                image = image.transpose(Image.ROTATE_180)
+            elif orientation == 4:
+                image = image.transpose(Image.FLIP_TOP_BOTTOM)
+            elif orientation == 5:
+                image = image.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
+            elif orientation == 6:
+                image = image.transpose(Image.ROTATE_270)
+            elif orientation == 7:
+                image = image.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
+            elif orientation == 8:
+                image = image.transpose(Image.ROTATE_90)
+            
+            # Save the corrected image
+            image.save(image_path, quality=95, exif=image.info.get('exif'))
+            
+    except Exception as e:
+        print(f"Error fixing image orientation: {str(e)}")
+
+def save_uploaded_image(uploaded_file):
+    """Save uploaded image to the images directory with orientation correction"""
+    image_dir = os.path.join('data', 'images')
+    os.makedirs(image_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_extension = os.path.splitext(uploaded_file.name)[1]
+    filename = f"tree_{timestamp}{file_extension}"
+    
+    file_path = os.path.join(image_dir, filename)
+    
+    # Save the original uploaded file
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
+    # Fix the orientation
+    fix_image_orientation(file_path)
+    
+    return file_path
+
 def save_uploaded_logo(uploaded_file):
-    """Save uploaded logo to the images directory"""
+    """Save uploaded logo to the images directory with orientation correction"""
     logo_dir = os.path.join('data', 'system')
     os.makedirs(logo_dir, exist_ok=True)
     
@@ -946,9 +1008,13 @@ def save_uploaded_logo(uploaded_file):
     filename = f"logo{file_extension}"
     file_path = os.path.join(logo_dir, filename)
     
+    # Save the original uploaded file
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
-        
+    
+    # Fix the orientation
+    fix_image_orientation(file_path)
+    
     return file_path
 
 def get_or_create_settings(db):

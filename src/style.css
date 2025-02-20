@@ -45,9 +45,10 @@ div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
 
 /* font stylings and selectors */
 #your-bonsai-collection {
-    font-family: "Kdam Thmor Pro", serif;
+    font-family: "Roboto", serif;
     font-weight: 400;
     font-style: normal;
+    padding: 1rem 1px;
 }
 
 button > div > p {
