@@ -348,8 +348,7 @@ def create_tree_card(tree, db):
             ).order_by(TreeUpdate.update_date.desc()).first()
             
             if latest_update:
-                st.write("**Last Update:**", latest_update.work_performed)
-                st.write(f"**Updated:** {latest_update.update_date.strftime('%Y-%m-%d')}")
+                st.write(f"**Last Update ({latest_update.update_date.strftime('%Y-%m-%d')})**\n\n{latest_update.work_performed}")
             
             # Action buttons in a single row
             col1, col2, col3 = st.columns([2, 3, 2])
@@ -1118,7 +1117,7 @@ def main():
 
         # Create a container to push buttons to the bottom
             with st.container():
-                st.markdown('<div class="sidebar-bottom">', unsafe_allow_html=True)
+                st.markdown('<div class="footer">', unsafe_allow_html=True)
             
                 # Replace radio with a button for archived trees
                 if st.session_state.page != "Archived Trees":

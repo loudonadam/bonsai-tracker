@@ -1,87 +1,45 @@
-div [class="st-emotion-cache-4tlk2p egexzqm0"] {
-    background-color: transparent;
-    border: none;
-    font-size: 1.2em; /* Adjust size if needed */
-    padding: .1rem .1rem;
-    margin: 0;
-    gap: 0rem;
+/* customizing the spacing beween lines for p */
+p {
+    margin: 0px 0px .3rem;
 }
 
-div.stButton > button:hover {
-    background-color: rgba(0, 0, 0, 0.1); /* Optional hover effect */
-    border-radius: 5px; /* Optional styling */
-}
-
-
+/* removing fullscreen buttons */
 button[aria-label="Fullscreen"] {
     display: none;
   }
 
-a[class="st-emotion-cache-yinll1 e1nzilvr3"] {
+/* adjusting sidebar button size */
+div[data-testid="stSidebarContent"] div.stButton button {
+    width: 50%;  /* Adjust width as needed */ 
+    font-size: 12px; /* Adjust text size */
+    padding: 4px 8px; /* Adjust padding */
+}
+
+/* hides the annoying link symbols */
+h1 > span > a > svg {
     display: none;
-  }
+}
+h2 > span > a > svg {
+    display: none;
+}
+h3 > span > a > svg {
+    display: none;
+}
+h4 > span > a > svg {
+    display: none;
+}
+h5 > span > a > svg {
+    display: none;
+}
+h6 > span > a > svg {
+    display: none;
+}
 
+/* sets the size of header for the sidebar */
 div[data-testid="stSidebarHeader"] {
-    height: 10px;
-    padding: 10px;
+    height: 15px;
+    padding: 15px;
   }
-
-header[data-testid="stHeader"] {
-    height: 1px;
-    padding: 1px;
-  }
-.st-key-settings {
-    border: black;
-    gap: 0rem;
-  }  
-
-/* Container styling */
-div [class ="st-emotion-cache-1h9usn1 eqpbllx3"] {
-    background-color: #FAFAFA;
-    padding: 1.5rem;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-/* font stylings and selectors */
-#your-bonsai-collection {
-    font-family: "Roboto", serif;
-    font-weight: 400;
-    font-style: normal;
-    padding: 1rem 1px;
-}
-
-button > div > p {
-    font-family: "Roboto", serif;
-    font-optical-sizing: auto;
-    font-weight: 500;
-    font-style: normal;
-    font-variation-settings:
-        "wdth" 100;
-    color: #333;
-}
-
-
-
-/* sidebar styling */
-.st-emotion-cache-1gv3huu {
-    width: auto;
-    color: #8E5E4D;
-    background-color: #8E5E4D;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.st-emotion-cache-t1wise {
-    width: 100%;
-    padding: 3rem 3rem 1rem;
-    max-width: initial;
-    min-width: auto;
-}
-
-.st-emotion-cache-1104ytp h2 {
-    font-size: 2.25rem;
-    padding: 0rem 0px;
-}
 
 /* Button styling */
 .stButton > button {
@@ -90,18 +48,31 @@ button > div > p {
     font-family: 'Raleway', sans-serif;
     transition: background-color 0.2s;
     gap: 0rem;
+    border: 1px solid rgb(196, 198, 202);
+    padding: 0rem 0rem;
 }
 
-.stButton > button.st-emotion-cache-zaw6nw{
+/* font stylings and selectors for top*/
+#your-bonsai-collection {
+    font-family: "Roboto", serif;
+    font-weight: 2000;
+    font-style: normal;
+    padding: 1rem 1px;
+}
+/* 
+adjusts the distance from the top, used to decrease size of main container so content shows more in a page */
+div [data-testid="stMainBlockContainer"] {
+    width: 100%;
+    padding: 2rem 3rem 1rem;
+    max-width: initial;
+    min-width: auto;
+}
+
+/*makes the setings button not have a background */
+div.st-key-settings div.stButton button{
     border: none;
     background-color: transparent;
     padding: .25rem .25rem;
-}
-
-.stButton > button[class="st-emotion-cache-iyz50i e1d5ycv52"]{
-    border: none;
-    background-color: transparent;
-    padding: 0rem 0rem;
 }
 
 @media (min-width: 768px) {
