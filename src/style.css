@@ -1,6 +1,6 @@
 /* customizing the spacing beween lines for p */
-p {
-    margin: 0px 0px .3rem;
+div[data-testid="stExpanderDetails"] > div > div > div {
+    gap: .5rem;
 }
 
 /* removing fullscreen buttons */
@@ -41,15 +41,63 @@ div[data-testid="stSidebarHeader"] {
     padding: 15px;
   }
 
+/*makes the settings button not have a background, but also giving hover effect*/
+div.st-key-settings div.stButton button{
+    border: none;
+    background-color: transparent;
+    padding: .25rem .25rem;
+}
+
+div.st-key-settings div.stButton button:hover{
+    border: none;
+    background-color: rgb(247, 247, 247);
+    padding: .25rem .25rem;
+}
+
+
+div[class*="st-key-star"] div.stButton button{
+    border: none;
+    background-color: transparent;
+    padding: .25rem .25rem;
+}
+
+div[class*="st-key-star"] div.stButton button:hover{
+    border: none;
+    background-color: rgb(247, 247, 247);
+    padding: .25rem .25rem;
+}
+
 /* Button styling */
 .stButton > button {
     background-color: #FAFAFA;
-    border-radius: 5px;
-    font-family: 'Raleway', sans-serif;
+    border-radius: 8px;
+    font-family: 'Roboto', sans-serif;
     transition: background-color 0.2s;
-    gap: 0rem;
+    gap: 2rem;
     border: 1px solid rgb(196, 198, 202);
     padding: 0rem 0rem;
+}
+
+/* Button styling */
+.stButton > button:hover {
+    background-color: #FAFAFA;
+    border-radius: 8px;
+    font-family: 'Roboto', sans-serif;
+    transition: background-color 0.2s;
+    gap: 2rem;
+    border: 1px solid rgb(136, 135, 135);
+    padding: 0rem 0rem;
+    color: rgb(20, 128, 61)
+}
+
+/* Button styling */
+.stButton > button > div > p{
+    border-radius: 8px;
+    font-size: small;
+    font-family: 'Roboto', sans-serif;
+    transition: background-color 0.2s;
+    gap: 0rem;
+    padding: .5rem .5rem;
 }
 
 /* font stylings and selectors for top*/
@@ -63,16 +111,9 @@ div[data-testid="stSidebarHeader"] {
 adjusts the distance from the top, used to decrease size of main container so content shows more in a page */
 div [data-testid="stMainBlockContainer"] {
     width: 100%;
-    padding: 2rem 3rem 1rem;
+    padding: 5rem 3rem 1rem;
     max-width: initial;
     min-width: auto;
-}
-
-/*makes the setings button not have a background */
-div.st-key-settings div.stButton button{
-    border: none;
-    background-color: transparent;
-    padding: .25rem .25rem;
 }
 
 @media (min-width: 768px) {
@@ -103,10 +144,10 @@ div.st-key-settings div.stButton button{
 }
 
 .reminder-popup {
-    background-color: #f8f9fa;
+    background-color: #f8f9fab2;
     border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 20px;
+    padding: 10px;
+    margin-bottom: 10px;
     border: 1px solid #dee2e6;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }

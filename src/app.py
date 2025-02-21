@@ -348,7 +348,7 @@ def create_tree_card(tree, db):
             ).order_by(TreeUpdate.update_date.desc()).first()
             
             if latest_update:
-                st.write(f"**Last Update ({latest_update.update_date.strftime('%Y-%m-%d')})**\n\n{latest_update.work_performed}")
+                st.write(f"**Last Update:** {latest_update.update_date.strftime('%Y-%m-%d')}")
             
             # Action buttons in a single row
             col1, col2, col3 = st.columns([2, 3, 2])
