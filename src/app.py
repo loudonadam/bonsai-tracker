@@ -1121,7 +1121,7 @@ def main():
             
                 # Replace radio with a button for archived trees
                 if st.session_state.page != "Archived Trees":
-                    if st.button("View Archive", use_container_width=True):
+                    if st.button("View Archive", use_container_width=True, key="arkive"):
                         st.session_state.page = "Archived Trees"
                         st.rerun()
                     

@@ -8,11 +8,32 @@ button[aria-label="Fullscreen"] {
     display: none;
   }
 
+button[kind="headerNoPadding"]{
+    z-index: 1000;
+}
+
+div[test-id="stSidebarCollapseButton"] button {
+    z-index: 1000;
+}
+
 /* adjusting sidebar button size */
-div[data-testid="stSidebarContent"] div.stButton button {
-    width: 50%;  /* Adjust width as needed */ 
-    font-size: 12px; /* Adjust text size */
-    padding: 4px 8px; /* Adjust padding */
+div[class*="key-export"] div.stButton button {
+      /* Adjust width as needed */ 
+    position: fixed;
+    bottom: 20px;
+    left: 120px;
+    width:160px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+
+div[class*="st-key-arkive"] div.stButton button {
+    position: fixed;
+    bottom: 70px;
+    left: 120px;
+    width:160px;
+    transform: translateX(-50%);
+    z-index: 1000;
 }
 
 /* hides the annoying link symbols */
@@ -46,6 +67,7 @@ div.st-key-settings div.stButton button{
     border: none;
     background-color: transparent;
     padding: .25rem .25rem;
+    width: 25%;
 }
 
 div.st-key-settings div.stButton button:hover{
