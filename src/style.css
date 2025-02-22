@@ -1,6 +1,27 @@
+/* font stylings and selectors for top*/
+h2 {
+    font-family: "Roboto", serif;
+    font-weight: 100;
+    padding: 1rem 1px;
+    font-size: large;
+}
+
+img {
+
+    border: 0px solid #b8b4b4; /* Subtle gray border */
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+    border-radius: 1px; /* Slightly rounded corners */
+  
+  }
+
 /* customizing the spacing beween lines for p */
 div[data-testid="stExpanderDetails"] > div > div > div {
     gap: .5rem;
+}
+
+/* making the expanders white to add contrast */
+.stExpander {
+    background-color: white;
 }
 
 /* removing fullscreen buttons */
@@ -25,6 +46,7 @@ div[class*="key-export"] div.stButton button {
     width:160px;
     transform: translateX(-50%);
     z-index: 1000;
+    background-color: #daddd4c5;
 }
 
 div[class*="st-key-arkive"] div.stButton button {
@@ -34,6 +56,7 @@ div[class*="st-key-arkive"] div.stButton button {
     width:160px;
     transform: translateX(-50%);
     z-index: 1000;
+    background-color: #daddd4c5;
 }
 
 /* hides the annoying link symbols */
@@ -91,7 +114,7 @@ div[class*="st-key-star"] div.stButton button:hover{
 
 /* Button styling */
 .stButton > button {
-    background-color: #FAFAFA;
+    background-color: #c0c7b22a;
     border-radius: 8px;
     font-family: 'Roboto', sans-serif;
     transition: background-color 0.2s;
@@ -122,13 +145,7 @@ div[class*="st-key-star"] div.stButton button:hover{
     padding: .5rem .5rem;
 }
 
-/* font stylings and selectors for top*/
-#your-bonsai-collection {
-    font-family: "Roboto", serif;
-    font-weight: 2000;
-    font-style: normal;
-    padding: 1rem 1px;
-}
+
 /* 
 adjusts the distance from the top, used to decrease size of main container so content shows more in a page */
 div [data-testid="stMainBlockContainer"] {

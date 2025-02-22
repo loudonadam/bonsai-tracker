@@ -300,7 +300,7 @@ def create_responsive_grid(trees, db):
 def create_tree_card(tree, db):
     """Update create_tree_card function with more responsive layout"""
     with st.container():
-        with st.expander(f"**{tree.tree_name}**  \n*({tree.tree_number})*", expanded=False):
+        with st.expander(f"**{tree.tree_name.strip()}**  \n*{tree.species_info.name.strip()}*", expanded=False):
             # Make buttons more touch-friendly on mobile
             button_cols = st.columns([1, 1, 1])
             
@@ -1102,6 +1102,9 @@ def main():
                 st.session_state.page = "Settings"
                 st.rerun()
             
+            # Use custom title
+            st.header(settings.app_title)
+            
             # Use custom logo if it exists and is valid
             if settings.sidebar_image and os.path.exists(settings.sidebar_image):
                 st.image(settings.sidebar_image, use_container_width=True)
@@ -1109,8 +1112,7 @@ def main():
                 # Fallback to default logo
                 st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
             
-            # Use custom title
-            st.title(settings.app_title)
+            
             
             
 
@@ -1161,7 +1163,7 @@ def main():
 
     # Main content
     if st.session_state.page == "View Trees":
-        st.header("Your Bonsai Collection")
+        st.header("Bonsai Collection")
         
         if st.button("➕ Add New Tree"):
             st.session_state.page = "Add New Tree"
