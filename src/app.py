@@ -17,7 +17,7 @@ from streamlit_extras.bottom_container import bottom
 from streamlit_extras.stateful_button import button as state_button
 from streamlit_extras.stylable_container import stylable_container
 from streamlit_extras.grid import grid
-
+import plotly.express as px
 
 def export_bonsai_data(db, export_dir="exports"):
     """
@@ -205,7 +205,7 @@ def show_work_history(tree_id):
             st.session_state.page = "View Trees"
             st.rerun()
             
-        st.header(f"Work History: {tree.tree_name} ({tree.tree_number})")
+        st.header(f"Work History: {tree.tree_name} *({tree.tree_number})*")
         
         # Growth History Chart in Expander
         with st.expander("📈 Growth History"):
@@ -218,16 +218,25 @@ def show_work_history(tree_id):
             if measurements:
                 # Prepare data for chart
                 data = [{
-                    'date': update.update_date.strftime('%Y-%m-%d'),
+                    'date': update.update_date.strftime('%Y-%m'),
                     'girth': update.girth
                 } for update in measurements]
                 
                 # Create chart using Streamlit
-                import plotly.express as px
                 df = pd.DataFrame(data)
+                df = df.groupby('date').first().reset_index()
                 fig = px.line(df, x='date', y='girth', 
-                    title='Trunk Girth Over Time (cm)',
-                    markers=True)
+                    markers=True,
+                    line_shape="spline",  # Smooth line
+                    color_discrete_sequence=['#2E8B57'])  # Forest green)
+                fig.update_layout(
+                xaxis_title="Date",
+                yaxis_title="Girth (cm)",  # Adjust units as needed
+                yaxis=dict(rangemode='tozero', gridcolor="lightgrey"),
+                xaxis=dict(tickangle=-45, showgrid=False, tickformat="%b %Y"),
+                plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified"
+            )
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("No growth measurements recorded yet.")
@@ -252,8 +261,6 @@ def show_work_history(tree_id):
             else:
                 st.info("No pending reminders.")
         
-        # Work History List
-        st.subheader("Work History")
         updates = db.query(TreeUpdate).filter(
             TreeUpdate.tree_id == tree_id
         ).order_by(TreeUpdate.update_date.desc()).all()
@@ -264,10 +271,6 @@ def show_work_history(tree_id):
                     # Date and work description
                     st.markdown(f"**{update.update_date.strftime('%Y-%m-%d')}**")
                     st.write(update.work_performed)
-                    
-                    # Show girth measurement if available
-                    if update.girth:
-                        st.write(f"*Trunk Width: {update.girth} cm*")
                     
                     # Add separator between updates
                     st.markdown("---")
@@ -399,7 +402,7 @@ def show_tree_gallery(tree_id):
         
         
         
-        st.header(f"Gallery: {tree.species_info.name} ({tree.tree_number})")
+        st.header(f"{tree.species_info.name} *({tree.tree_number})*")
             
         photos = db.query(Photo).filter(
             Photo.tree_id == tree_id
@@ -415,25 +418,10 @@ def show_tree_gallery(tree_id):
         with col2:
             # Photo display loop
             for photo in photos:
-                tree_galler_grid = grid([8,1],1,[10,2,2])
+                tree_galler_grid = grid(1,[10,1.5,1.5,1.5])
                 if os.path.exists(photo.file_path):
-                    tree_galler_grid.write("")
                     # Create a unique key for each photo's container
-                    with tree_galler_grid.container():
-                        # Display the image
-                        # Star/unstar button
-                        star_icon = "⭐" if photo.is_starred else "☆"
-                        if st.button(star_icon, key=f"star_{photo.id}", use_container_width=True, type = "secondary"):
-                            # Unstar all other photos for this tree
-                            if not photo.is_starred:
-                                db.query(Photo).filter(
-                                    Photo.tree_id == tree_id,
-                                    Photo.id != photo.id
-                                ).update({"is_starred": 0})
-                            # Toggle star status for this photo
-                            photo.is_starred = 1 - photo.is_starred
-                            db.commit()
-                            st.rerun()
+
                     tree_galler_grid.image(photo.file_path, use_container_width =True)
                             
                     # Initialize session state for edit mode
@@ -446,26 +434,47 @@ def show_tree_gallery(tree_id):
                         new_date = tree_galler_grid.date_input(
                             "Edit Photo Date",
                             value=photo.photo_date.date(),
-                            key=f"date_input_{photo.id}"
+                            key=f"date_input_{photo.id}",
+                            label_visibility="collapsed"
                         )
-                        
+                        col1, col2, col3 = st.columns([1,1,8])
                         # Save button
-                        if st.button("Save", key=f"save_{photo.id}"):
-                            photo.photo_date = datetime.combine(new_date, datetime.min.time())
-                            db.commit()
-                            st.session_state[edit_key] = False
-                            st.rerun()
+                        with col1:
+                            if st.button("Save", key=f"save_{photo.id}", use_container_width=True):
+                                photo.photo_date = datetime.combine(new_date, datetime.min.time())
+                                db.commit()
+                                st.session_state[edit_key] = False
+                                st.rerun()
                         
+                        with col2:
                         # Cancel button
-                        if st.button("Cancel", key=f"cancel_{photo.id}"):
-                            st.session_state[edit_key] = False
-                            st.rerun()
+                            if st.button("Cancel", key=f"cancel_{photo.id}", use_container_width=True):
+                                st.session_state[edit_key] = False
+                                st.rerun()
+                    
+                    
                     else:
                         # Display current date when not in edit mode
                         tree_galler_grid.write(f"Date: {photo.photo_date.strftime('%Y-%m-%d')}")
+                        with tree_galler_grid.container():
+                            # Display the image
+                            # Star/unstar button
+                            star_icon = "⭐" if photo.is_starred else "☆"
+                            if st.button(star_icon, key=f"star_{photo.id}", use_container_width=True, type = "secondary"):
+                                # Unstar all other photos for this tree
+                                if not photo.is_starred:
+                                    db.query(Photo).filter(
+                                        Photo.tree_id == tree_id,
+                                        Photo.id != photo.id
+                                    ).update({"is_starred": 0})
+                                # Toggle star status for this photo
+                                photo.is_starred = 1 - photo.is_starred
+                                db.commit()
+                                st.rerun()
+                        
                     
 
-                    if tree_galler_grid.button("Edit Date", key=f"edit_button_{photo.id}"):
+                    if tree_galler_grid.button("Edit Date", key=f"edit_button_{photo.id}",use_container_width=True):
                         st.session_state[f"edit_mode_{photo.id}"] = True
                         st.rerun()
                     
@@ -476,7 +485,7 @@ def show_tree_gallery(tree_id):
                         st.session_state[delete_key] = False
                     
                     if not st.session_state[delete_key]:
-                        if tree_galler_grid.button("Delete", key=f"delete_{photo.id}"):
+                        if tree_galler_grid.button("Delete", key=f"delete_{photo.id}",use_container_width=True):
                             st.session_state[delete_key] = True
                             st.rerun()
                     else:
@@ -494,9 +503,9 @@ def show_tree_gallery(tree_id):
                         if st.button("No", key=f"confirm_no_{photo.id}"):
                             st.session_state[delete_key] = False
                             st.rerun()
-                    
-                    # Add a separator between photos
-                    st.markdown("---")
+                            
+                st.markdown("")
+
     finally:
         db.close()
         

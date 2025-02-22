@@ -6,6 +6,18 @@ h2 {
     font-size: large;
 }
 
+.plot-container {
+    
+    padding: 15px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+div[class*="tree_grid"]{
+    gap: 0rem;
+}
+
 img {
 
     border: 0px solid #b8b4b4; /* Subtle gray border */
