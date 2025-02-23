@@ -305,7 +305,7 @@ def create_tree_card(tree, db):
     with st.container():
         with st.expander(f"**{tree.tree_name.strip()}**  \n*{tree.species_info.name.strip()}*", expanded=False):
             # Make buttons more touch-friendly on mobile
-            button_cols = st.columns([1, 1, 1])
+            button_cols = st.columns([2, 1, 2])
             
             with button_cols[0]:
                 if st.button("Gallery", key=f"gallery_{tree.id}", use_container_width=True):
@@ -313,15 +313,11 @@ def create_tree_card(tree, db):
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
-            with button_cols[1]:
-                if st.button("History", key=f"work_history_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Work History"
-                    st.session_state.selected_tree = tree.id
-                    st.rerun()
+
             
             with button_cols[2]:
-                if st.button("Add Update", key=f"update_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Update Tree"
+                if st.button("History", key=f"work_history_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Work History"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
@@ -354,17 +350,16 @@ def create_tree_card(tree, db):
                 st.write(f"**Last Update:** {latest_update.update_date.strftime('%Y-%m-%d')}")
             
             # Action buttons in a single row
-            col1, col2, col3 = st.columns([2, 3, 2])
+            col1, col2, col3 = st.columns([2, 1, 2])
             with col1:
                 if st.button(f"Edit", key=f"edit_{tree.id}", use_container_width=True):
                     st.session_state.page = "Edit Tree"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             with col3:
-                if st.button("Archive", key=f"archive_{tree.id}", use_container_width=True):
-                    tree.is_archived = 1
-                    db.commit()
-                    st.success(f"Tree {tree.tree_number} archived successfully!")
+                if st.button("Add Update", key=f"update_{tree.id}", use_container_width=True):
+                    st.session_state.page = "Update Tree"
+                    st.session_state.selected_tree = tree.id
                     st.rerun()
                 
 
@@ -568,52 +563,68 @@ def show_update_form(tree_id):
                 reminder_date = None
                 reminder_message = None
             
-            if st.form_submit_button("Save Update"):
-                # Validate reminder fields if checkbox is checked
-                if st.session_state[session_key] and (not reminder_date or not reminder_message):
-                    st.error("Please fill in both reminder fields when setting a reminder")
-                    st.rerun()
-                
-                # Create tree update with specified date
-                update = TreeUpdate(
-                    tree_id=tree_id,
-                    update_date=datetime.combine(update_date, datetime.min.time()),
-                    girth=current_girth,
-                    work_performed=work_description
-                )
-                db.add(update)
-                
-                # Update tree's current girth
-                tree.current_girth = current_girth
-                
-                # Save photos
-                if uploaded_files:
-                    image_paths = save_uploaded_images(uploaded_files)
-                    for path in image_paths:
-                        photo_date = get_exif_date(path)
-                        photo = Photo(
-                            tree_id=tree_id,
-                            file_path=path,
-                            photo_date=photo_date,
-                            description=work_description
-                        )
-                        db.add(photo)
-                
-                # Create reminder if specified
-                if st.session_state[session_key]:
-                    reminder = Reminder(
+            col1, col2, col3 = st.columns([1,1,1])
+            
+            with col1:
+                if st.form_submit_button("Save Update"):
+                    # Validate reminder fields if checkbox is checked
+                    if st.session_state[session_key] and (not reminder_date or not reminder_message):
+                        st.error("Please fill in both reminder fields when setting a reminder")
+                        st.rerun()
+                    
+                    # Create tree update with specified date
+                    update = TreeUpdate(
                         tree_id=tree_id,
-                        reminder_date=datetime.combine(reminder_date, datetime.min.time()),
-                        message=reminder_message
+                        update_date=datetime.combine(update_date, datetime.min.time()),
+                        girth=current_girth,
+                        work_performed=work_description
                     )
-                    db.add(reminder)
-                
-                db.commit()
-                st.success("Update saved successfully!")
-                # Reset the reminder state after successful submission
-                st.session_state[session_key] = False
-                st.session_state.page = "View Trees"
-                st.rerun()
+                    db.add(update)
+                    
+                    # Update tree's current girth
+                    tree.current_girth = current_girth
+                    
+                    # Save photos
+                    if uploaded_files:
+                        image_paths = save_uploaded_images(uploaded_files)
+                        for path in image_paths:
+                            photo_date = get_exif_date(path)
+                            photo = Photo(
+                                tree_id=tree_id,
+                                file_path=path,
+                                photo_date=photo_date,
+                                description=work_description
+                            )
+                            db.add(photo)
+                    
+                    # Create reminder if specified
+                    if st.session_state[session_key]:
+                        reminder = Reminder(
+                            tree_id=tree_id,
+                            reminder_date=datetime.combine(reminder_date, datetime.min.time()),
+                            message=reminder_message
+                        )
+                        db.add(reminder)
+                    
+                    db.commit()
+                    st.success("Update saved successfully!")
+                    # Reset the reminder state after successful submission
+                    st.session_state[session_key] = False
+                    st.session_state.page = "View Trees"
+                    st.rerun()
+            with col3:
+                if st.form_submit_button("Add to Graveyard"):
+                    update = TreeUpdate(
+                        tree_id=tree_id,
+                        update_date=datetime.now(),
+                        work_performed=work_description
+                    )
+                    db.add(update)
+                    tree.is_archived = 1
+                    db.commit()
+                    st.success(f"Tree {tree.tree_number} added to the graveyard.")
+                    st.session_state.page = "Graveyard"
+                    st.rerun()
     finally:
         db.close()
 
@@ -731,47 +742,66 @@ def show_add_tree_form():
         
     db.close()
 
-def show_archived_trees():
-    """Display archived trees with option to delete"""
-    st.header("Archived Trees")
+def show_graveyard_trees():
+    """Display trees in the graveyard with their final update."""
+    st.header("Bonsai Graveyard")
     
     db = SessionLocal()
     try:
-        archived_trees = db.query(Tree).filter(Tree.is_archived == 1).all()
+        graveyard_trees = db.query(Tree).filter(Tree.is_archived == 1).all()
         
-        if not archived_trees:
-            st.info("No archived trees found.")
+        if not graveyard_trees:
+            st.info("No trees in the graveyard yet.")
             return
         
-        for tree in archived_trees:
+        for tree in graveyard_trees:
             with st.container():
-                col1, col2, col3 = st.columns([6, 2, 2])
+                col1, col2, col3 = st.columns([10, 1, 1])
                 
                 with col1:
-                    st.write(f"**{tree.tree_name}** ({tree.tree_number})")
-                    st.write(f"Species: {tree.species_info.name}")
+                    st.write(f"**{tree.tree_name.strip()}** ({tree.tree_number})  \n*{tree.species_info.name.strip()}*")
+                    
+                    last_update = (
+                        db.query(TreeUpdate)
+                        .filter(TreeUpdate.tree_id == tree.id)
+                        .order_by(TreeUpdate.update_date.desc())
+                        .first()
+                    )
+                    if last_update:
+                        st.write(f"**Final Update:** {last_update.work_performed}")
+                    else:
+                        st.write("No final update recorded.")
                 
                 with col2:
-                    if st.button("Restore", key=f"restore_{tree.id}"):
+                    if st.button("Restore", key=f"restore_{tree.id}", use_container_width=True):
                         tree.is_archived = 0
                         db.commit()
                         st.success(f"Tree {tree.tree_number} restored!")
                         st.rerun()
                 
                 with col3:
-                    if st.button("Delete", key=f"delete_{tree.id}"):
-                        # Delete associated photos from filesystem
-                        for photo in tree.photos:
-                            if os.path.exists(photo.file_path):
-                                os.remove(photo.file_path)
+                    if state_button("Delete Forever", key=f"delete_{tree.id}", use_container_width=True):
+                        if "confirm_delete" not in st.session_state:
+                            st.session_state.confirm_delete = False
                         
-                        # Delete tree from database
-                        db.delete(tree)
-                        db.commit()
-                        st.success(f"Tree {tree.tree_number} deleted permanently!")
-                        st.rerun()
-                
-                st.markdown("---")
+                        if not st.session_state.confirm_delete:
+                            st.warning("Are you sure you want to delete this tree forever?")
+                            if st.button("Yes, Delete", key=f"confirm_delete_{tree.id}"):
+                                st.session_state.confirm_delete = True
+                                st.rerun()
+                        else:
+                            # Delete associated photos from filesystem
+                            for photo in tree.photos:
+                                if os.path.exists(photo.file_path):
+                                    os.remove(photo.file_path)
+                            
+                            # Delete tree from database
+                            db.delete(tree)
+                            db.commit()
+                            st.success(f"Tree {tree.tree_number} deleted permanently!")
+                            st.rerun()
+                        
+            st.markdown("---")
     finally:
         db.close()
 
@@ -1131,9 +1161,9 @@ def main():
                 st.markdown('<div class="footer">', unsafe_allow_html=True)
             
                 # Replace radio with a button for archived trees
-                if st.session_state.page != "Archived Trees":
-                    if st.button("View Archive", use_container_width=True, key="arkive"):
-                        st.session_state.page = "Archived Trees"
+                if st.session_state.page != "Graveyard":
+                    if st.button("Graveyard", use_container_width=True, key="arkive"):
+                        st.session_state.page = "Graveyard"
                         st.rerun()
                     
 
@@ -1212,13 +1242,13 @@ def main():
         finally:
             db.close()
     
-    elif st.session_state.page == "Archived Trees":
+    elif st.session_state.page == "Graveyard":
         # Add back button at the top
         if st.button("← Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
             
-        show_archived_trees()
+        show_graveyard_trees()
     
     elif st.session_state.page == "Add New Tree":
         # Add "Back to Collection" button at the top
