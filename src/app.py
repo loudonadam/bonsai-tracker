@@ -3,7 +3,7 @@
 import streamlit as st
 from src.database import get_db, SessionLocal
 from src.models import Tree, TreeUpdate, Photo, Reminder, Species, Settings
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, and_
 from datetime import datetime
 import os
 import pandas as pd
@@ -18,6 +18,7 @@ from streamlit_extras.stateful_button import button as state_button
 from streamlit_extras.stylable_container import stylable_container
 from streamlit_extras.grid import grid
 import plotly.express as px
+import tempfile
 
 def export_bonsai_data(db, export_dir="exports"):
     """
@@ -151,6 +152,139 @@ def export_bonsai_data(db, export_dir="exports"):
     shutil.rmtree(export_path)
     
     return zip_path
+
+def import_bonsai_data(db, zip_path, images_dir="uploads"):
+    """
+    Import bonsai data and images from an export zip file
+    
+    Parameters:
+    db (SessionLocal): Database session
+    zip_path (str): Path to the export zip file
+    images_dir (str): Base directory for storing imported images
+    
+    Returns:
+    dict: Summary of imported data
+    """
+    
+    # Create temporary directory for zip extraction
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Extract zip file
+        with ZipFile(zip_path, 'r') as zipf:
+            zipf.extractall(temp_dir)
+        
+        # Read JSON data
+        with open(os.path.join(temp_dir, "trees_data.json"), 'r', encoding='utf-8') as f:
+            trees_data = json.load(f)
+        
+        summary = {
+            'trees_imported': 0,
+            'updates_imported': 0,
+            'photos_imported': 0,
+            'reminders_imported': 0
+        }
+        
+        # Process each tree
+        for tree_data in trees_data:
+            # Check if tree already exists
+            existing_tree = db.query(Tree).filter_by(
+                tree_number=tree_data['tree_number']
+            ).first()
+            
+            if existing_tree:
+                # Update existing tree
+                tree = existing_tree
+                tree.tree_name = tree_data['tree_name']
+                tree.species_info = db.query(Species).filter_by(
+                    name=tree_data['species']
+                ).first()
+                tree.current_girth = tree_data['current_girth']
+                tree.notes = tree_data['notes']
+                tree.is_archived = tree_data['is_archived']
+                tree.training_age = tree_data['training_age']
+                tree.true_age = tree_data['true_age']
+            else:
+                # Create new tree
+                species = db.query(Species).filter_by(
+                    name=tree_data['species']
+                ).first()
+                
+                tree = Tree(
+                    tree_number=tree_data['tree_number'],
+                    tree_name=tree_data['tree_name'],
+                    species_info=species,
+                    date_acquired=datetime.fromisoformat(tree_data['date_acquired']),
+                    origin_date=datetime.fromisoformat(tree_data['origin_date']),
+                    current_girth=tree_data['current_girth'],
+                    notes=tree_data['notes'],
+                    is_archived=tree_data['is_archived'],
+                    training_age=tree_data['training_age'],
+                    true_age=tree_data['true_age']
+                )
+                db.add(tree)
+                summary['trees_imported'] += 1
+            
+            # Import updates
+            if existing_tree:
+                # Clear existing updates
+                db.query(Update).filter_by(tree_id=tree.id).delete()
+            
+            for update_data in tree_data['updates']:
+                update = Update(
+                    tree=tree,
+                    update_date=datetime.fromisoformat(update_data['date']),
+                    girth=update_data['girth'],
+                    work_performed=update_data['work_performed']
+                )
+                db.add(update)
+                summary['updates_imported'] += 1
+            
+            # Import photos
+            if existing_tree:
+                # Clear existing photos
+                db.query(Photo).filter_by(tree_id=tree.id).delete()
+            
+            tree_images_path = os.path.join(temp_dir, "images", tree_data['tree_number'])
+            if os.path.exists(tree_images_path):
+                for photo_data in tree_data['photos']:
+                    # Create directory for tree photos if it doesn't exist
+                    tree_upload_dir = os.path.join(images_dir, tree_data['tree_number'])
+                    os.makedirs(tree_upload_dir, exist_ok=True)
+                    
+                    # Copy photo file to uploads directory
+                    source_path = os.path.join(tree_images_path, photo_data['file_name'])
+                    if os.path.exists(source_path):
+                        dest_path = os.path.join(tree_upload_dir, photo_data['file_name'])
+                        shutil.copy2(source_path, dest_path)
+                        
+                        photo = Photo(
+                            tree=tree,
+                            file_path=dest_path,
+                            photo_date=datetime.fromisoformat(photo_data['photo_date']),
+                            description=photo_data['description'],
+                            is_starred=photo_data['is_starred']
+                        )
+                        db.add(photo)
+                        summary['photos_imported'] += 1
+            
+            # Import reminders
+            if existing_tree:
+                # Clear existing reminders
+                db.query(Reminder).filter_by(tree_id=tree.id).delete()
+            
+            for reminder_data in tree_data['reminders']:
+                reminder = Reminder(
+                    tree=tree,
+                    reminder_date=datetime.fromisoformat(reminder_data['date']),
+                    message=reminder_data['message'],
+                    is_completed=reminder_data['is_completed']
+                )
+                db.add(reminder)
+                summary['reminders_imported'] += 1
+        
+        # Commit all changes
+        db.commit()
+        
+        return summary
 
 def get_exif_date(image_path):
     """Extract date from image EXIF data if available"""
@@ -1098,21 +1232,66 @@ def show_settings_form():
                 if new_logo:
                     st.image(new_logo, width=125)
                 
-                if st.form_submit_button("Save Settings"):
-                    try:
-                        settings.app_title = new_title
+                col1, col2, col3 = st.columns([1,4,2])
+                
+                with col1:
+                    if st.form_submit_button("Save Settings", use_container_width=True):
+                        try:
+                            settings.app_title = new_title
+                            
+                            if new_logo:
+                                logo_path = save_uploaded_logo(new_logo)
+                                settings.sidebar_image = logo_path
+                            
+                            db.commit()
+                            st.success("Settings updated successfully!")
+                            st.session_state.page = "View Trees"
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Error saving settings: {str(e)}")
                         
-                        if new_logo:
-                            logo_path = save_uploaded_logo(new_logo)
-                            settings.sidebar_image = logo_path
-                        
-                        db.commit()
-                        st.success("Settings updated successfully!")
-                        st.session_state.page = "View Trees"
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Error saving settings: {str(e)}")
+                
+            with st.expander("Import Backup"):
+            # Import functionality
+                with st.form("import_form"):
+                    uploaded_file = st.file_uploader(
+                        "Upload Backup File",
+                        type=['zip'],
+                        help="Select a backup file created by the export function"
+                    )
+                    
+                    submit_button = st.form_submit_button("Restore from Backup")
+                    
+                    if submit_button and uploaded_file is not None:
+                        try:
+                            # Save uploaded file temporarily
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+                                tmp_file.write(uploaded_file.getvalue())
+                                temp_path = tmp_file.name
+
+                            with st.spinner("Restoring from backup..."):
+                                # Import the data
+                                summary = import_bonsai_data(db, temp_path)
+                                
+                                # Show import summary
+                                st.success("Backup restored successfully!")
+                                st.write("Import Summary:")
+                                st.write(f"- Trees imported: {summary['trees_imported']}")
+                                st.write(f"- Updates imported: {summary['updates_imported']}")
+                                st.write(f"- Photos imported: {summary['photos_imported']}")
+                                st.write(f"- Reminders imported: {summary['reminders_imported']}")
+                                
+                                # Clean up
+                                os.unlink(temp_path)
+                                
+                                # Prompt for refresh
+                                st.info("Please refresh the page to see the imported data.")
+                                
+                        except Exception as e:
+                            st.error(f"Error restoring from backup: {str(e)}")
+                    elif submit_button and uploaded_file is None:
+                        st.error("Please upload a backup file first")
         finally:
             db.close()
 
