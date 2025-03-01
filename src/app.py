@@ -3,7 +3,8 @@
 import streamlit as st
 from src.database import get_db, SessionLocal
 from src.models import Tree, TreeUpdate, Photo, Reminder, Species, Settings
-from sqlalchemy import func, desc, and_
+from sqlalchemy import func, desc, and_, create_engine
+from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 import os
 import pandas as pd
@@ -153,138 +154,117 @@ def export_bonsai_data(db, export_dir="exports"):
     
     return zip_path
 
-def import_bonsai_data(db, zip_path, images_dir="uploads"):
+
+def import_bonsai_data(db: Session, zip_file_path: str, image_dir="bonsai_images"):
     """
-    Import bonsai data and images from an export zip file
-    
+    Import bonsai data and images from a structured ZIP archive.
+
     Parameters:
-    db (SessionLocal): Database session
-    zip_path (str): Path to the export zip file
-    images_dir (str): Base directory for storing imported images
-    
+    db (Session): Database session
+    zip_file_path (str): Path to the ZIP file containing the backup
+    image_dir (str): Directory where bonsai images will be stored
+
     Returns:
-    dict: Summary of imported data
+    bool: True if successful, False otherwise
     """
-    
-    # Create temporary directory for zip extraction
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Extract zip file
-        with ZipFile(zip_path, 'r') as zipf:
-            zipf.extractall(temp_dir)
-        
-        # Read JSON data
-        with open(os.path.join(temp_dir, "trees_data.json"), 'r', encoding='utf-8') as f:
-            trees_data = json.load(f)
-        
-        summary = {
-            'trees_imported': 0,
-            'updates_imported': 0,
-            'photos_imported': 0,
-            'reminders_imported': 0
-        }
-        
-        # Process each tree
-        for tree_data in trees_data:
-            # Check if tree already exists
-            existing_tree = db.query(Tree).filter_by(
-                tree_number=tree_data['tree_number']
-            ).first()
-            
-            if existing_tree:
-                # Update existing tree
-                tree = existing_tree
-                tree.tree_name = tree_data['tree_name']
-                tree.species_info = db.query(Species).filter_by(
-                    name=tree_data['species']
-                ).first()
-                tree.current_girth = tree_data['current_girth']
-                tree.notes = tree_data['notes']
-                tree.is_archived = tree_data['is_archived']
-                tree.training_age = tree_data['training_age']
-                tree.true_age = tree_data['true_age']
-            else:
-                # Create new tree
-                species = db.query(Species).filter_by(
-                    name=tree_data['species']
-                ).first()
-                
+    try:
+        # Extract ZIP file
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with ZipFile(zip_file_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+
+            # Load tree data from JSON
+            json_file_path = os.path.join(temp_dir, "trees_data.json")
+            if not os.path.exists(json_file_path):
+                raise FileNotFoundError("Missing trees_data.json in backup")
+
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                trees_data = json.load(f)
+
+            # Clear existing data
+            db.query(Photo).delete()
+            db.query(TreeUpdate).delete()
+            db.query(Reminder).delete()
+            db.query(Tree).delete()
+            db.commit()
+
+            # Restore trees and related data
+            for tree_data in trees_data:
+                species = db.query(Species).filter_by(name=tree_data["species"]).first()
+                if not species:
+                    species = Species(name=tree_data["species"])
+                    db.add(species)
+                    db.commit()
+
                 tree = Tree(
-                    tree_number=tree_data['tree_number'],
-                    tree_name=tree_data['tree_name'],
-                    species_info=species,
-                    date_acquired=datetime.fromisoformat(tree_data['date_acquired']),
-                    origin_date=datetime.fromisoformat(tree_data['origin_date']),
-                    current_girth=tree_data['current_girth'],
-                    notes=tree_data['notes'],
-                    is_archived=tree_data['is_archived'],
-                    training_age=tree_data['training_age'],
-                    true_age=tree_data['true_age']
+                    tree_number=tree_data["tree_number"],
+                    tree_name=tree_data["tree_name"],
+                    species_id=species.id,
+                    date_acquired=datetime.fromisoformat(tree_data["date_acquired"]),
+                    origin_date=datetime.fromisoformat(tree_data["origin_date"]),
+                    current_girth=tree_data["current_girth"],
+                    notes=tree_data["notes"],
+                    is_archived=tree_data["is_archived"]
                 )
                 db.add(tree)
-                summary['trees_imported'] += 1
-            
-            # Import updates
-            if existing_tree:
-                # Clear existing updates
-                db.query(Update).filter_by(tree_id=tree.id).delete()
-            
-            for update_data in tree_data['updates']:
-                update = Update(
-                    tree=tree,
-                    update_date=datetime.fromisoformat(update_data['date']),
-                    girth=update_data['girth'],
-                    work_performed=update_data['work_performed']
-                )
-                db.add(update)
-                summary['updates_imported'] += 1
-            
-            # Import photos
-            if existing_tree:
-                # Clear existing photos
-                db.query(Photo).filter_by(tree_id=tree.id).delete()
-            
-            tree_images_path = os.path.join(temp_dir, "images", tree_data['tree_number'])
-            if os.path.exists(tree_images_path):
-                for photo_data in tree_data['photos']:
-                    # Create directory for tree photos if it doesn't exist
-                    tree_upload_dir = os.path.join(images_dir, tree_data['tree_number'])
-                    os.makedirs(tree_upload_dir, exist_ok=True)
-                    
-                    # Copy photo file to uploads directory
-                    source_path = os.path.join(tree_images_path, photo_data['file_name'])
-                    if os.path.exists(source_path):
-                        dest_path = os.path.join(tree_upload_dir, photo_data['file_name'])
-                        shutil.copy2(source_path, dest_path)
-                        
-                        photo = Photo(
-                            tree=tree,
-                            file_path=dest_path,
-                            photo_date=datetime.fromisoformat(photo_data['photo_date']),
-                            description=photo_data['description'],
-                            is_starred=photo_data['is_starred']
-                        )
-                        db.add(photo)
-                        summary['photos_imported'] += 1
-            
-            # Import reminders
-            if existing_tree:
-                # Clear existing reminders
-                db.query(Reminder).filter_by(tree_id=tree.id).delete()
-            
-            for reminder_data in tree_data['reminders']:
-                reminder = Reminder(
-                    tree=tree,
-                    reminder_date=datetime.fromisoformat(reminder_data['date']),
-                    message=reminder_data['message'],
-                    is_completed=reminder_data['is_completed']
-                )
-                db.add(reminder)
-                summary['reminders_imported'] += 1
-        
-        # Commit all changes
-        db.commit()
-        
-        return summary
+                db.commit()
+
+                # Restore updates
+                for update in tree_data["updates"]:
+                    db.add(TreeUpdate(
+                        tree_id=tree.id,
+                        update_date=datetime.fromisoformat(update["date"]),
+                        girth=update["girth"],
+                        work_performed=update["work_performed"]
+                    ))
+
+                # Restore reminders
+                for reminder in tree_data["reminders"]:
+                    db.add(Reminder(
+                        tree_id=tree.id,
+                        reminder_date=datetime.fromisoformat(reminder["date"]),
+                        message=reminder["message"],
+                        is_completed=reminder["is_completed"]
+                    ))
+
+                db.commit()
+
+            # Restore images and photo records
+            extracted_images_path = os.path.join(temp_dir, "images")
+            if os.path.exists(extracted_images_path):
+                for tree_folder in os.listdir(extracted_images_path):
+                    tree_images_path = os.path.join(extracted_images_path, tree_folder)
+                    destination_path = os.path.join(image_dir, tree_folder)
+                    os.makedirs(destination_path, exist_ok=True)
+
+                    # Find the tree in the database
+                    tree = db.query(Tree).filter_by(tree_number=tree_folder).first()
+                    if not tree:
+                        continue  # Skip if tree is missing
+
+                    for image_file in os.listdir(tree_images_path):
+                        src_file_path = os.path.join(tree_images_path, image_file)
+                        dest_file_path = os.path.join(destination_path, image_file)
+
+                        # Copy the image
+                        shutil.copy2(src_file_path, dest_file_path)
+
+                        # Add photo record in the database
+                        db.add(Photo(
+                            tree_id=tree.id,
+                            file_path=dest_file_path,
+                            photo_date=datetime.strptime(image_file[:8], "%Y%m%d"),  # Extract date from filename
+                            description="Imported photo",
+                            is_starred=0
+                        ))
+
+                db.commit()
+
+            return True
+    except Exception as e:
+        print(f"Error importing data: {e}")
+        return False
+
 
 def get_exif_date(image_path):
     """Extract date from image EXIF data if available"""
@@ -1252,46 +1232,47 @@ def show_settings_form():
                             st.error(f"Error saving settings: {str(e)}")
                         
                 
-            with st.expander("Import Backup"):
-            # Import functionality
-                with st.form("import_form"):
-                    uploaded_file = st.file_uploader(
-                        "Upload Backup File",
-                        type=['zip'],
-                        help="Select a backup file created by the export function"
-                    )
-                    
-                    submit_button = st.form_submit_button("Restore from Backup")
-                    
-                    if submit_button and uploaded_file is not None:
-                        try:
-                            # Save uploaded file temporarily
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
-                                tmp_file.write(uploaded_file.getvalue())
-                                temp_path = tmp_file.name
+                                    # Function to confirm action
+            def confirm_restore():
+                return st.button("Yes, Restore Data", type="primary")
 
-                            with st.spinner("Restoring from backup..."):
-                                # Import the data
-                                summary = import_bonsai_data(db, temp_path)
-                                
-                                # Show import summary
+            with st.expander("⚠️ Import Backup"):
+                st.warning("This action will **overwrite** all existing bonsai data. Make sure you have a recent backup before proceeding!")
+
+                # File uploader (inside form)
+                uploaded_file = st.file_uploader(
+                    "Upload Backup File",
+                    type=['zip'],
+                    help="Select a backup file created by the export function"
+                )
+
+                # Checkbox outside the form to dynamically enable the button
+                confirm_checkbox = st.checkbox("I understand this will erase existing data and replace it with the backup.")
+
+                # Restore button (not inside form, enabled only if checkbox is checked)
+                restore_button = st.button("⚠️ Restore from Backup", type="primary", disabled=not confirm_checkbox)
+
+                if restore_button and uploaded_file is not None:
+                    with st.spinner("Preparing to restore backup..."):
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+                            tmp_file.write(uploaded_file.getvalue())
+                            temp_path = tmp_file.name
+
+                    # Final confirmation before proceeding
+                    st.error("⚠️ **Final Confirmation Required!** This will erase all existing data.")
+                    confirm_restore = st.button("✅ Yes, Restore Data", type="primary")
+
+                    if confirm_restore:  # If user clicks the final confirm button
+                        with st.spinner("Restoring from backup..."):
+                            success = import_bonsai_data(db, temp_path)
+                            if success:
                                 st.success("Backup restored successfully!")
-                                st.write("Import Summary:")
-                                st.write(f"- Trees imported: {summary['trees_imported']}")
-                                st.write(f"- Updates imported: {summary['updates_imported']}")
-                                st.write(f"- Photos imported: {summary['photos_imported']}")
-                                st.write(f"- Reminders imported: {summary['reminders_imported']}")
-                                
-                                # Clean up
-                                os.unlink(temp_path)
-                                
-                                # Prompt for refresh
-                                st.info("Please refresh the page to see the imported data.")
-                                
-                        except Exception as e:
-                            st.error(f"Error restoring from backup: {str(e)}")
-                    elif submit_button and uploaded_file is None:
-                        st.error("Please upload a backup file first")
+                            else:
+                                st.error("Failed to restore backup.")
+                elif restore_button and uploaded_file is None:
+                    st.error("Please upload a backup file first.")
+
+
         finally:
             db.close()
 
@@ -1359,7 +1340,8 @@ def main():
                                     label="Download Export",
                                     data=f,
                                     file_name=os.path.basename(export_path),
-                                    mime="application/zip"
+                                    mime="application/zip",
+                                    key="download_export"
                                 )
                             
                             # Clean up zip file after download button is created

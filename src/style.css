@@ -50,6 +50,18 @@ div[test-id="stSidebarCollapseButton"] button {
 }
 
 /* adjusting sidebar button size */
+div[class*="key-download_export"] div.stDownloadButton button {
+    /* Adjust width as needed */ 
+  position: fixed;
+  bottom: 120px;
+  left: 120px;
+  width:160px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background-color: #fefefec5;
+}
+
+/* adjusting sidebar button size */
 div[class*="key-export"] div.stButton button {
       /* Adjust width as needed */ 
     position: fixed;
