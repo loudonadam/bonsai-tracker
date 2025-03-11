@@ -107,7 +107,7 @@ def export_bonsai_data(db, export_dir="exports"):
             "Name": t["tree_name"],
             "Species": t["species"],
             "Date Acquired": t["date_acquired"],
-            "Current Girth (cm)": t["current_girth"],
+            "Trunk Width (mm)": t["current_girth"],
             "Training Age (years)": round(t["training_age"], 1),
             "True Age (years)": round(t["true_age"], 1),
             "Status": "Archived" if t["is_archived"] else "Active"
@@ -122,7 +122,7 @@ def export_bonsai_data(db, export_dir="exports"):
                     "Tree Number": tree["tree_number"],
                     "Tree Name": tree["tree_name"],
                     "Date": update["date"],
-                    "Girth (cm)": update["girth"],
+                    "Trunk Width (mm)": update["girth"],
                     "Work Performed": update["work_performed"]
                 })
         pd.DataFrame(updates_data).to_excel(writer, sheet_name="Work History", index=False)
@@ -309,7 +309,7 @@ def save_uploaded_images(uploaded_files):
     return image_paths
 
 def show_work_history(tree_id):
-    """Display work history, girth measurements, and reminders for a specific tree"""
+    """Display work history, trunk measurements, and reminders for a specific tree"""
     db = SessionLocal()
     try:
         tree = db.query(Tree).filter(Tree.id == tree_id).first()
@@ -333,19 +333,19 @@ def show_work_history(tree_id):
                 # Prepare data for chart
                 data = [{
                     'date': update.update_date.strftime('%Y-%m'),
-                    'girth': update.girth
+                    'trunk width': update.girth
                 } for update in measurements]
                 
                 # Create chart using Streamlit
                 df = pd.DataFrame(data)
                 df = df.groupby('date').first().reset_index()
-                fig = px.line(df, x='date', y='girth', 
+                fig = px.line(df, x='date', y='trunk width', 
                     markers=True,
                     line_shape="spline",  # Smooth line
                     color_discrete_sequence=['#2E8B57'])  # Forest green)
                 fig.update_layout(
                 xaxis_title="Date",
-                yaxis_title="Girth (cm)",  # Adjust units as needed
+                yaxis_title="Trunk width (mm)",  # Adjust units as needed
                 yaxis=dict(rangemode='tozero', gridcolor="lightgrey"),
                 xaxis=dict(tickangle=-45, showgrid=False, tickformat="%b %Y"),
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -375,16 +375,97 @@ def show_work_history(tree_id):
             else:
                 st.info("No pending reminders.")
         
+        # Initialize session state for edit mode if it doesn't exist
+        if 'edit_update_id' not in st.session_state:
+            st.session_state.edit_update_id = None
+        
+        # Get tree updates
         updates = db.query(TreeUpdate).filter(
             TreeUpdate.tree_id == tree_id
         ).order_by(TreeUpdate.update_date.desc()).all()
         
+        # Display edit form if in edit mode
+        if st.session_state.edit_update_id is not None:
+            update_to_edit = db.query(TreeUpdate).get(st.session_state.edit_update_id)
+            if update_to_edit:
+                st.subheader("Edit Update")
+                
+                # Create form for editing
+                with st.form(key="edit_update_form"):
+                    edit_date = st.date_input("Date", value=update_to_edit.update_date)
+                    edit_girth = st.number_input("Trunk Width (mm)", 
+                                            value=float(update_to_edit.girth) if update_to_edit.girth else 0.0,
+                                            min_value=0.0, 
+                                            format="%.1f",
+                                            step=0.1)
+                    edit_work = st.text_area("Work Performed", value=update_to_edit.work_performed)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        save_button = st.form_submit_button("Save Changes")
+                    with col2:
+                        cancel_button = st.form_submit_button("Cancel")
+                
+                # Handle form submission
+                if save_button:
+                    # Update the database
+                    update_to_edit.update_date = datetime.combine(edit_date, datetime.min.time())
+                    update_to_edit.girth = edit_girth
+                    update_to_edit.work_performed = edit_work
+                    db.commit()
+                    
+                    # Exit edit mode
+                    st.session_state.edit_update_id = None
+                    st.success("Update saved successfully!")
+                    st.rerun()
+                
+                if cancel_button:
+                    # Exit edit mode without saving
+                    st.session_state.edit_update_id = None
+                    st.rerun()
+        
+        # Display work history
         if updates:
             for update in updates:
                 with st.container():
-                    # Date and work description
-                    st.markdown(f"**{update.update_date.strftime('%Y-%m-%d')}**")
-                    st.write(update.work_performed)
+                    # Use columns for layout
+                    col1, col2, col3 = st.columns([14, 1, 1])
+                    
+                    with col1:
+                        # Date and work description
+                        st.markdown(f"**{update.update_date.strftime('%Y-%m-%d')}**")
+                        if update.girth:
+                            st.markdown(f"*Trunk width: {update.girth} mm*")
+                        st.write(update.work_performed)
+                    
+                    with col2:
+                        # Edit button
+                        if st.button("✏️", key=f"edit_{update.id}", use_container_width=True):
+                            st.session_state.edit_update_id = update.id
+                            st.rerun()
+                    
+                    with col3:
+                        # Delete button with confirmation
+                        if st.button("🗑️", key=f"delete_{update.id}", use_container_width=True):
+                            st.session_state[f"confirm_delete_{update.id}"] = True
+                            st.rerun()
+                    
+                    # Show confirmation dialog if delete was clicked
+                    if st.session_state.get(f"confirm_delete_{update.id}", False):
+                        st.warning(f"Are you sure you want to delete this entry from {update.update_date.strftime('%Y-%m-%d')}?")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Yes, Delete", key=f"confirm_yes_{update.id}"):
+                                # Delete the update
+                                db.delete(update)
+                                db.commit()
+                                st.session_state.pop(f"confirm_delete_{update.id}")
+                                st.success("Entry deleted!")
+                                st.rerun()
+                        with col2:
+                            if st.button("Cancel", key=f"confirm_no_{update.id}"):
+                                st.session_state.pop(f"confirm_delete_{update.id}")
+                                st.rerun()
                     
                     # Add separator between updates
                     st.markdown("---")
@@ -649,7 +730,7 @@ def show_update_form(tree_id):
             
             with col1:
                 current_girth = st.number_input(
-                    "New Trunk Width (cm)", 
+                    "New Trunk Width (mm)", 
                     value=tree.current_girth if tree.current_girth else 0.0,
                     step=0.1
                 )
@@ -785,7 +866,7 @@ def show_add_tree_form():
             col1, col2 = st.columns(2)
             
             with col1:
-                current_girth = st.number_input("Current Girth (cm)", 
+                current_girth = st.number_input("Current Trunk Width (mm)", 
                     min_value=0.0, step=0.1)
             
             with col2:
@@ -1212,7 +1293,7 @@ def show_settings_form():
                 if new_logo:
                     st.image(new_logo, width=125)
                 
-                col1, col2, col3 = st.columns([1,4,2])
+                col1, col2, col3 = st.columns([2,4,2])
                 
                 with col1:
                     if st.form_submit_button("Save Settings", use_container_width=True):
@@ -1233,48 +1314,286 @@ def show_settings_form():
                         
                 
                                     # Function to confirm action
-            def confirm_restore():
-                return st.button("Yes, Restore Data", type="primary")
-
             with st.expander("⚠️ Import Backup"):
                 st.warning("This action will **overwrite** all existing bonsai data. Make sure you have a recent backup before proceeding!")
 
-                # File uploader (inside form)
-                uploaded_file = st.file_uploader(
-                    "Upload Backup File",
-                    type=['zip'],
-                    help="Select a backup file created by the export function"
-                )
+                # Initialize session state if needed
+                if 'restore_state' not in st.session_state:
+                    st.session_state.restore_state = "upload"
+                
+                # File uploader (shown in initial state)
+                if st.session_state.restore_state == "upload":
+                    uploaded_file = st.file_uploader(
+                        "Upload Backup File",
+                        type=['zip'],
+                        help="Select a backup file created by the export function"
+                    )
 
-                # Checkbox outside the form to dynamically enable the button
-                confirm_checkbox = st.checkbox("I understand this will erase existing data and replace it with the backup.")
+                    # Checkbox to enable the button
+                    confirm_checkbox = st.checkbox("I understand this will erase existing data and replace it with the backup.")
 
-                # Restore button (not inside form, enabled only if checkbox is checked)
-                restore_button = st.button("⚠️ Restore from Backup", type="primary", disabled=not confirm_checkbox)
-
-                if restore_button and uploaded_file is not None:
-                    with st.spinner("Preparing to restore backup..."):
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
-                            tmp_file.write(uploaded_file.getvalue())
-                            temp_path = tmp_file.name
-
-                    # Final confirmation before proceeding
+                    # Restore button (enabled only if checkbox is checked)
+                    if st.button("⚠️ Restore from Backup", type="primary", disabled=not confirm_checkbox):
+                        if uploaded_file is not None:
+                            # Save file to temporary location
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+                                tmp_file.write(uploaded_file.getvalue())
+                                st.session_state.temp_path = tmp_file.name
+                            # Move to confirmation state
+                            st.session_state.restore_state = "confirm"
+                            st.rerun()
+                        else:
+                            st.error("Please upload a backup file first.")
+                
+                # Final confirmation state
+                elif st.session_state.restore_state == "confirm":
                     st.error("⚠️ **Final Confirmation Required!** This will erase all existing data.")
-                    confirm_restore = st.button("✅ Yes, Restore Data", type="primary")
-
-                    if confirm_restore:  # If user clicks the final confirm button
-                        with st.spinner("Restoring from backup..."):
-                            success = import_bonsai_data(db, temp_path)
-                            if success:
-                                st.success("Backup restored successfully!")
-                            else:
-                                st.error("Failed to restore backup.")
-                elif restore_button and uploaded_file is None:
-                    st.error("Please upload a backup file first.")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Yes, Restore Data", type="primary"):
+                            with st.spinner("Restoring from backup..."):
+                                success = import_bonsai_data(db, st.session_state.temp_path)
+                                if success:
+                                    st.success("Backup restored successfully!")
+                                    # Clean up
+                                    st.session_state.restore_state = "upload"
+                                    if hasattr(st.session_state, 'temp_path'):
+                                        del st.session_state.temp_path
+                                else:
+                                    st.error("Failed to restore backup.")
+                    
+                    with col2:
+                        if st.button("❌ Cancel"):
+                            st.session_state.restore_state = "upload"
+                            if hasattr(st.session_state, 'temp_path'):
+                                # Clean up temp file
+                                try:
+                                    os.remove(st.session_state.temp_path)
+                                except:
+                                    pass
+                                del st.session_state.temp_path
+                            st.rerun()
 
 
         finally:
             db.close()
+
+def show_species_notes():
+    """
+    Display the species notes page with options to manage species.
+    """
+    st.header("Species Notes")
+    
+    # Add back button
+    if st.button("← Back to Collection"):
+        st.session_state.page = "View Trees"
+        st.rerun()
+    
+    # Add new species button
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("➕ Add New Species", use_container_width=True):
+            st.session_state.show_add_species = True
+    
+    # Add new species form
+    if st.session_state.get("show_add_species", False):
+        with st.form("add_species_form"):
+            st.subheader("Add New Species")
+            species_name = st.text_input("Species Name", key="new_species_name")
+            species_notes = st.text_area("Species Notes (Markdown supported)", 
+                                        height=300,
+                                        help="You can use markdown formatting for your notes.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                submit = st.form_submit_button("Save Species")
+            with col2:
+                cancel = st.form_submit_button("Cancel")
+            
+            if submit and species_name:
+                db = SessionLocal()
+                try:
+                    # Check if species already exists
+                    existing = db.query(Species).filter(Species.name == species_name).first()
+                    if existing:
+                        st.error(f"Species '{species_name}' already exists.")
+                    else:
+                        new_species = Species(name=species_name, notes=species_notes)
+                        db.add(new_species)
+                        db.commit()
+                        st.success(f"Species '{species_name}' added successfully!")
+                        st.session_state.show_add_species = False
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error adding species: {str(e)}")
+                finally:
+                    db.close()
+            
+            if cancel:
+                st.session_state.show_add_species = False
+                st.rerun()
+    
+    # Display species list
+    db = SessionLocal()
+    try:
+        species_list = db.query(Species).order_by(Species.name).all()
+        
+        if not species_list:
+            st.info("No species have been added yet. Click 'Add New Species' to get started.")
+        else:
+            # Create two columns: one for the list and one for the notes display
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                st.subheader("Species List")
+                for species in species_list:
+                    col_a, col_b, col_c = st.columns([3, 1, 1])
+                    with col_a:
+                        if st.button(f"{species.name}", key=f"view_{species.id}", use_container_width=True):
+                            st.session_state.selected_species = species.id
+                            st.rerun()
+                    with col_b:
+                        if st.button("✏️", key=f"edit_{species.id}"):
+                            st.session_state.selected_species = species.id
+                            st.session_state.page = "Edit Species"
+                            st.rerun()
+                    with col_c:
+                        if st.button("🗑️", key=f"delete_{species.id}"):
+                            st.session_state.delete_species_id = species.id
+                            st.session_state.delete_species_name = species.name
+                            st.session_state.show_delete_confirmation = True
+                            st.rerun()
+            
+            # Show species notes if one is selected
+            with col2:
+                if st.session_state.get("selected_species"):
+                    selected = db.query(Species).filter(Species.id == st.session_state.selected_species).first()
+                    if selected:
+                        st.subheader(f"{selected.name} Notes")
+                        
+                        # Check if there are trees using this species
+                        tree_count = db.query(Tree).filter(Tree.species_id == selected.id).count()
+                        if tree_count > 0:
+                            st.info(f"This species is used by {tree_count} tree{'s' if tree_count > 1 else ''} in your collection.")
+                        
+                        # Display formatted notes
+                        if selected.notes:
+                            st.markdown(selected.notes)
+                        else:
+                            st.info("No notes available for this species.")
+                        
+                        # Edit button
+                        if st.button("Edit Notes", key="edit_notes"):
+                            st.session_state.page = "Edit Species"
+                            st.rerun()
+                    else:
+                        st.info("Select a species from the list to view its notes.")
+                else:
+                    st.info("Select a species from the list to view its notes.")
+        
+        # Delete confirmation dialog
+        if st.session_state.get("show_delete_confirmation", False):
+            with st.container():
+                st.warning(f"Are you sure you want to delete '{st.session_state.delete_species_name}'?")
+                
+                # Check if this species is used by any trees
+                tree_count = db.query(Tree).filter(Tree.species_id == st.session_state.delete_species_id).count()
+                if tree_count > 0:
+                    st.error(f"This species is used by {tree_count} tree{'s' if tree_count > 1 else ''} in your collection. You cannot delete it until you reassign those trees to different species.")
+                    if st.button("Cancel", key="cancel_delete"):
+                        st.session_state.show_delete_confirmation = False
+                        st.rerun()
+                else:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Yes, Delete", key="confirm_delete"):
+                            try:
+                                species_to_delete = db.query(Species).filter(Species.id == st.session_state.delete_species_id).first()
+                                if species_to_delete:
+                                    db.delete(species_to_delete)
+                                    db.commit()
+                                    st.session_state.show_delete_confirmation = False
+                                    if st.session_state.get("selected_species") == st.session_state.delete_species_id:
+                                        st.session_state.selected_species = None
+                                    st.success(f"Species '{st.session_state.delete_species_name}' deleted successfully!")
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting species: {str(e)}")
+                    with col2:
+                        if st.button("Cancel", key="cancel_delete"):
+                            st.session_state.show_delete_confirmation = False
+                            st.rerun()
+                            
+    except Exception as e:
+        st.error(f"Error loading species: {str(e)}")
+    finally:
+        db.close()
+
+def show_edit_species_form(species_id):
+    """Display the form to edit a species"""
+    db = SessionLocal()
+    try:
+        species = db.query(Species).filter(Species.id == species_id).first()
+        if not species:
+            st.error("Species not found")
+            if st.button("Back to Species Notes"):
+                st.session_state.page = "Species Notes"
+                st.rerun()
+            return
+        
+        st.header(f"Edit {species.name}")
+        
+        # Back button
+        if st.button("← Back to Species Notes"):
+            st.session_state.page = "Species Notes"
+            st.rerun()
+        
+        with st.form("edit_species_form"):
+            species_name = st.text_input("Species Name", value=species.name)
+            
+            species_notes = st.text_area("Species Notes (Markdown supported)", 
+                                        value=species.notes or "", 
+                                        height=400)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                submit = st.form_submit_button("Save Changes")
+            with col2:
+                cancel = st.form_submit_button("Cancel")
+            
+            if submit:
+                if not species_name:
+                    st.error("Species name cannot be empty")
+                else:
+                    try:
+                        # Check if the name already exists (for a different species)
+                        existing = db.query(Species).filter(
+                            Species.name == species_name, 
+                            Species.id != species.id
+                        ).first()
+                        
+                        if existing:
+                            st.error(f"Species '{species_name}' already exists.")
+                        else:
+                            species.name = species_name
+                            species.notes = species_notes
+                            db.commit()
+                            st.success("Species updated successfully!")
+                            # Go back to species notes page
+                            st.session_state.page = "Species Notes"
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error updating species: {str(e)}")
+            
+            if cancel:
+                st.session_state.page = "Species Notes"
+                st.rerun()
+        
+    except Exception as e:
+        st.error(f"Error loading species: {str(e)}")
+    finally:
+        db.close()
 
 def main():
     st.set_page_config(page_title="Bonsai Tracker", layout="wide", initial_sidebar_state="auto")
@@ -1287,6 +1606,8 @@ def main():
         st.session_state.page = "View Trees"
     if 'selected_tree' not in st.session_state:
         st.session_state.selected_tree = None
+    if 'selected_species' not in st.session_state:
+        st.session_state.selected_species = None
     
     show_reminder_popup()
     
@@ -1311,24 +1632,24 @@ def main():
                 # Fallback to default logo
                 st.image("C:\\Users\\loudo\\Desktop\\Bonsai Design\\Screenshot+2020-01-29+at+10.52.32+AM.png", width=125)
             
-            
-            
-            
-
-
-        # Create a container to push buttons to the bottom
+            # Create a container to push buttons to the bottom
             with st.container():
                 st.markdown('<div class="footer">', unsafe_allow_html=True)
-            
+                
+                # Add Species Notes button
+                if st.session_state.page != "Species Notes":
+                    if st.button("Species Notes", use_container_width=True, key="species_notes"):
+                        st.session_state.page = "Species Notes"
+                        st.rerun()
+                
                 # Replace radio with a button for archived trees
                 if st.session_state.page != "Graveyard":
                     if st.button("Graveyard", use_container_width=True, key="arkive"):
                         st.session_state.page = "Graveyard"
                         st.rerun()
-                    
-
+                
                 # Add export button to sidebar
-                if state_button("Export Data", key="export",use_container_width=True):
+                if state_button("Export Data", key="export", use_container_width=True):
                     with st.spinner("Preparing export..."):
                         try:
                             db = SessionLocal()
@@ -1403,6 +1724,12 @@ def main():
         finally:
             db.close()
     
+    elif st.session_state.page == "Species Notes":
+        show_species_notes()
+    
+    elif st.session_state.page == "Edit Species" and st.session_state.selected_species:
+        show_edit_species_form(st.session_state.selected_species)
+    
     elif st.session_state.page == "Graveyard":
         # Add back button at the top
         if st.button("← Back to Collection"):
@@ -1431,7 +1758,6 @@ def main():
         
     elif st.session_state.page == "Work History" and st.session_state.selected_tree:
         show_work_history(st.session_state.selected_tree)
-        
         
     #button font
     st.markdown("""

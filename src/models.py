@@ -11,13 +11,15 @@ class Settings(Base):
     id = Column(Integer, primary_key=True)
     app_title = Column(String, default="Bonsai Tracker")
     sidebar_image = Column(String)
-
+    
+# Update the Species model in models.py
 class Species(Base):
     __tablename__ = 'species'
     
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    notes = Column(Text)  # Add this field for storing formatted notes
     
     # Relationship to trees
     trees = relationship("Tree", back_populates="species_info")
