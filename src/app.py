@@ -761,7 +761,12 @@ def show_update_form(tree_id):
             col1, col2, col3 = st.columns([1,1,1])
             
             with col1:
-                if st.form_submit_button("Save Update"):
+                if 'form_submitted' not in st.session_state:
+                    st.session_state.form_submitted = False
+
+                if st.form_submit_button("Save Update") and not st.session_state.form_submitted:
+                    st.session_state.form_submitted = True
+
                     # Validate reminder fields if checkbox is checked
                     if st.session_state[session_key] and (not reminder_date or not reminder_message):
                         st.error("Please fill in both reminder fields when setting a reminder")
@@ -779,7 +784,7 @@ def show_update_form(tree_id):
                     # Update tree's current girth
                     tree.current_girth = current_girth
                     
-                    # Save photos
+                    # Save photos - only process once regardless of number of uploads
                     if uploaded_files:
                         image_paths = save_uploaded_images(uploaded_files)
                         for path in image_paths:
@@ -807,6 +812,8 @@ def show_update_form(tree_id):
                     st.session_state[session_key] = False
                     st.session_state.page = "View Trees"
                     st.rerun()
+                    st.session_state.form_submitted = False
+                    
             with col3:
                 if st.form_submit_button("Add to Graveyard"):
                     update = TreeUpdate(
