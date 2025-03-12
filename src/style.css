@@ -61,28 +61,6 @@ div[class*="key-download_export"] div.stDownloadButton button {
   background-color: #fefefec5;
 }
 
-/* adjusting sidebar button size */
-div[class*="key-export"] div.stButton button {
-      /* Adjust width as needed */ 
-    position: fixed;
-    bottom: 20px;
-    left: 120px;
-    width:160px;
-    transform: translateX(-50%);
-    z-index: 1000;
-    background-color: #daddd4c5;
-}
-
-div[class*="st-key-arkive"] div.stButton button {
-    position: fixed;
-    bottom: 70px;
-    left: 120px;
-    width:160px;
-    transform: translateX(-50%);
-    z-index: 1000;
-    background-color: #daddd4c5;
-}
-
 /* hides the annoying link symbols */
 h1 > span > a > svg {
     display: none;
