@@ -682,12 +682,22 @@ def show_tree_gallery(tree_id):
                         st.warning("Are you sure you want to delete this photo?")
                         # Yes button
                         if st.button("Yes", key=f"confirm_yes_{photo.id}"):
-                            if os.path.exists(photo.file_path):
-                                os.remove(photo.file_path)
-                            db.delete(photo)
-                            db.commit()
-                            st.session_state[delete_key] = False
-                            st.rerun()
+                            try:
+                                # First remove the file if it exists
+                                if os.path.exists(photo.file_path):
+                                    os.remove(photo.file_path)
+                                
+                                # Then delete from database
+                                db.delete(photo)
+                                db.commit()
+                                st.success("Photo deleted successfully")
+                                
+                                # Clear the confirmation state
+                                st.session_state[delete_key] = False
+                                st.rerun()
+                            except Exception as e:
+                                db.rollback()  # Roll back in case of error
+                                st.error(f"Error deleting photo: {str(e)}")
                         
                         # No button
                         if st.button("No", key=f"confirm_no_{photo.id}"):
@@ -761,58 +771,76 @@ def show_update_form(tree_id):
             col1, col2, col3 = st.columns([1,1,1])
             
             with col1:
+                # Initialize form submission state
                 if 'form_submitted' not in st.session_state:
                     st.session_state.form_submitted = False
 
-                if st.form_submit_button("Save Update") and not st.session_state.form_submitted:
-                    st.session_state.form_submitted = True
-
-                    # Validate reminder fields if checkbox is checked
-                    if st.session_state[session_key] and (not reminder_date or not reminder_message):
-                        st.error("Please fill in both reminder fields when setting a reminder")
-                        st.rerun()
-                    
-                    # Create tree update with specified date
-                    update = TreeUpdate(
-                        tree_id=tree_id,
-                        update_date=datetime.combine(update_date, datetime.min.time()),
-                        girth=current_girth,
-                        work_performed=work_description
-                    )
-                    db.add(update)
-                    
-                    # Update tree's current girth
-                    tree.current_girth = current_girth
-                    
-                    # Save photos - only process once regardless of number of uploads
-                    if uploaded_files:
-                        image_paths = save_uploaded_images(uploaded_files)
-                        for path in image_paths:
-                            photo_date = get_exif_date(path)
-                            photo = Photo(
+                # Handle form submission
+                if st.form_submit_button("Save Update"):
+                    if not st.session_state.form_submitted:
+                        st.session_state.form_submitted = True
+                        
+                        try:
+                            # Validate reminder fields if checkbox is checked
+                            if st.session_state[session_key] and (not reminder_date or not reminder_message):
+                                st.error("Please fill in both reminder fields when setting a reminder")
+                                st.session_state.form_submitted = False
+                                st.rerun()
+                            
+                            # Create tree update with specified date
+                            update = TreeUpdate(
                                 tree_id=tree_id,
-                                file_path=path,
-                                photo_date=photo_date,
-                                description=work_description
+                                update_date=datetime.combine(update_date, datetime.min.time()),
+                                girth=current_girth,
+                                work_performed=work_description
                             )
-                            db.add(photo)
-                    
-                    # Create reminder if specified
-                    if st.session_state[session_key]:
-                        reminder = Reminder(
-                            tree_id=tree_id,
-                            reminder_date=datetime.combine(reminder_date, datetime.min.time()),
-                            message=reminder_message
-                        )
-                        db.add(reminder)
-                    
-                    db.commit()
-                    st.success("Update saved successfully!")
-                    # Reset the reminder state after successful submission
-                    st.session_state[session_key] = False
-                    st.session_state.page = "View Trees"
-                    st.rerun()
-                    st.session_state.form_submitted = False
+                            db.add(update)
+                            
+                            # Update tree's current girth
+                            tree.current_girth = current_girth
+                            
+                            # Save photos - only process once regardless of number of uploads
+                            if uploaded_files:
+                                image_paths = save_uploaded_images(uploaded_files)
+                                
+                                # Debug statement - remove in production
+                                st.write(f"Debug: Found {len(image_paths)} paths: {image_paths}")
+                                
+                                for index, path in enumerate(image_paths):
+                                    photo_date = get_exif_date(path)
+                                    
+                                    # Debug statement - remove in production
+                                    st.write(f"Debug: Processing image {index+1}: {path}")
+                                    
+                                    photo = Photo(
+                                        tree_id=tree_id,
+                                        file_path=path,
+                                        photo_date=photo_date,
+                                        description=work_description
+                                    )
+                                    db.add(photo)
+                            
+                            # Create reminder if specified
+                            if st.session_state[session_key]:
+                                reminder = Reminder(
+                                    tree_id=tree_id,
+                                    reminder_date=datetime.combine(reminder_date, datetime.min.time()),
+                                    message=reminder_message
+                                )
+                                db.add(reminder)
+                            
+                            # Commit all changes
+                            db.commit()
+                            
+                            st.success("Update saved successfully!")
+                            # Reset the reminder state after successful submission
+                            st.session_state[session_key] = False
+                            st.session_state.page = "View Trees"
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving update: {str(e)}")
+                            st.session_state.form_submitted = False
+                            db.rollback()
                     
             with col3:
                 if st.form_submit_button("Add to Graveyard"):
@@ -1224,7 +1252,7 @@ def save_uploaded_image(uploaded_file):
     image_dir = os.path.join('data', 'images')
     os.makedirs(image_dir, exist_ok=True)
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     file_extension = os.path.splitext(uploaded_file.name)[1]
     filename = f"tree_{timestamp}{file_extension}"
     
