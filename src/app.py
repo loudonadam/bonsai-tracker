@@ -20,6 +20,18 @@ from streamlit_extras.stylable_container import stylable_container
 from streamlit_extras.grid import grid
 import plotly.express as px
 import tempfile
+import uuid
+
+def reset_form_states():
+    """Reset all form-related session state variables"""
+    keys_to_remove = []
+    for key in st.session_state:
+        if key.startswith("form_submitted_") or key.startswith("set_reminder_"):
+            keys_to_remove.append(key)
+    
+    for key in keys_to_remove:
+        if key in st.session_state:
+            del st.session_state[key]
 
 def export_bonsai_data(db, export_dir="exports"):
     """
@@ -315,7 +327,7 @@ def show_work_history(tree_id):
         tree = db.query(Tree).filter(Tree.id == tree_id).first()
         
         # Back button at the top
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
             
@@ -500,19 +512,30 @@ def create_tree_card(tree, db):
     with st.container():
         with st.expander(f"**{tree.tree_name.strip()}**  \n*{tree.species_info.name.strip()}*", expanded=False):
             # Make buttons more touch-friendly on mobile
-            button_cols = st.columns([2, 1, 2])
+            button_cols = st.columns([1, 1, 1, 1])
             
             with button_cols[0]:
-                if st.button("Gallery", key=f"gallery_{tree.id}", use_container_width=True):
+                if st.button("",icon= ":material/photo_library:", key=f"gallery_{tree.id}", use_container_width=True, help="View Gallery"):
                     st.session_state.page = "Tree Gallery"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
 
             
-            with button_cols[2]:
-                if st.button("History", key=f"work_history_{tree.id}", use_container_width=True):
+            with button_cols[1]:
+                if st.button("",icon= ":material/history:", key=f"work_history_{tree.id}", use_container_width=True, help="View Work History"):
                     st.session_state.page = "Work History"
+                    st.session_state.selected_tree = tree.id
+                    st.rerun()
+                    
+            with button_cols[2]:
+                if st.button("",icon= ":material/edit:", key=f"edit_{tree.id}", use_container_width=True, help="Edit Tree Details"):
+                    st.session_state.page = "Edit Tree"
+                    st.session_state.selected_tree = tree.id
+                    st.rerun()
+            with button_cols[3]:
+                if st.button("",icon= ":material/post_add:", key=f"update_{tree.id}", use_container_width=True, help="Add Update"):
+                    st.session_state.page = "Update Tree"
                     st.session_state.selected_tree = tree.id
                     st.rerun()
             
@@ -542,21 +565,7 @@ def create_tree_card(tree, db):
             ).order_by(TreeUpdate.update_date.desc()).first()
             
             if latest_update:
-                st.write(f"**Last Update:** {latest_update.update_date.strftime('%Y-%m-%d')}")
-            
-            # Action buttons in a single row
-            col1, col2, col3 = st.columns([2, 1, 2])
-            with col1:
-                if st.button(f"Edit", key=f"edit_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Edit Tree"
-                    st.session_state.selected_tree = tree.id
-                    st.rerun()
-            with col3:
-                if st.button("Add Update", key=f"update_{tree.id}", use_container_width=True):
-                    st.session_state.page = "Update Tree"
-                    st.session_state.selected_tree = tree.id
-                    st.rerun()
-                
+                st.write(f"**Last Update:** {latest_update.update_date.strftime('%Y-%m-%d')}")                
 
 def set_page_and_tree(page, tree_id=None):
     """Helper function to set both page and selected tree"""
@@ -585,7 +594,7 @@ def show_tree_gallery(tree_id):
             st.session_state.gallery_initialized = True
         
         # Add "Back to Collection" button at the top
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
             st.session_state.page = "View Trees"
             st.session_state.gallery_initialized = False
             st.rerun()
@@ -715,7 +724,9 @@ def show_update_form(tree_id):
     try:
         tree = db.query(Tree).filter(Tree.id == tree_id).first()
         
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
+            # Reset form states before navigating away
+            reset_form_states()
             st.session_state.page = "View Trees"
             st.rerun()
             
@@ -725,6 +736,11 @@ def show_update_form(tree_id):
         session_key = f"set_reminder_{tree_id}"
         if session_key not in st.session_state:
             st.session_state[session_key] = False
+
+        # Use a tree-specific form submission key
+        form_key = f"form_submitted_{tree_id}"
+        if form_key not in st.session_state:
+            st.session_state[form_key] = False
 
         # Checkbox outside the form for immediate feedback
         set_reminder = st.checkbox(
@@ -771,20 +787,15 @@ def show_update_form(tree_id):
             col1, col2, col3 = st.columns([1,1,1])
             
             with col1:
-                # Initialize form submission state
-                if 'form_submitted' not in st.session_state:
-                    st.session_state.form_submitted = False
-
-                # Handle form submission
                 if st.form_submit_button("Save Update"):
-                    if not st.session_state.form_submitted:
-                        st.session_state.form_submitted = True
+                    if not st.session_state[form_key]:
+                        st.session_state[form_key] = True
                         
                         try:
                             # Validate reminder fields if checkbox is checked
                             if st.session_state[session_key] and (not reminder_date or not reminder_message):
                                 st.error("Please fill in both reminder fields when setting a reminder")
-                                st.session_state.form_submitted = False
+                                st.session_state[form_key] = False
                                 st.rerun()
                             
                             # Create tree update with specified date
@@ -803,14 +814,8 @@ def show_update_form(tree_id):
                             if uploaded_files:
                                 image_paths = save_uploaded_images(uploaded_files)
                                 
-                                # Debug statement - remove in production
-                                st.write(f"Debug: Found {len(image_paths)} paths: {image_paths}")
-                                
                                 for index, path in enumerate(image_paths):
                                     photo_date = get_exif_date(path)
-                                    
-                                    # Debug statement - remove in production
-                                    st.write(f"Debug: Processing image {index+1}: {path}")
                                     
                                     photo = Photo(
                                         tree_id=tree_id,
@@ -833,28 +838,35 @@ def show_update_form(tree_id):
                             db.commit()
                             
                             st.success("Update saved successfully!")
-                            # Reset the reminder state after successful submission
+                            # Reset the form state and reminder state
+                            st.session_state[form_key] = False
                             st.session_state[session_key] = False
                             st.session_state.page = "View Trees"
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error saving update: {str(e)}")
-                            st.session_state.form_submitted = False
+                            st.session_state[form_key] = False
                             db.rollback()
                     
             with col3:
                 if st.form_submit_button("Add to Graveyard"):
-                    update = TreeUpdate(
-                        tree_id=tree_id,
-                        update_date=datetime.now(),
-                        work_performed=work_description
-                    )
-                    db.add(update)
-                    tree.is_archived = 1
-                    db.commit()
-                    st.success(f"Tree {tree.tree_number} added to the graveyard.")
-                    st.session_state.page = "Graveyard"
-                    st.rerun()
+                    try:
+                        update = TreeUpdate(
+                            tree_id=tree_id,
+                            update_date=datetime.now(),
+                            work_performed=work_description
+                        )
+                        db.add(update)
+                        tree.is_archived = 1
+                        db.commit()
+                        st.success(f"Tree {tree.tree_number} added to the graveyard.")
+                        # Reset form states
+                        reset_form_states()
+                        st.session_state.page = "Graveyard"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error archiving tree: {str(e)}")
+                        db.rollback()
     finally:
         db.close()
 
@@ -1252,9 +1264,11 @@ def save_uploaded_image(uploaded_file):
     image_dir = os.path.join('data', 'images')
     os.makedirs(image_dir, exist_ok=True)
     
+    # Add microseconds to ensure unique filenames
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    unique_id = str(uuid.uuid4())
     file_extension = os.path.splitext(uploaded_file.name)[1]
-    filename = f"tree_{timestamp}{file_extension}"
+    filename = f"tree_{timestamp}_{unique_id}{file_extension}"
     
     file_path = os.path.join(image_dir, filename)
     
@@ -1418,18 +1432,13 @@ def show_species_notes():
     """
     Display the species notes page with options to manage species.
     """
-    st.header("Species Notes")
-    
-    # Add back button
-    if st.button("← Back to Collection"):
+    if st.button(":material/arrow_back: Back to Collection"):
         st.session_state.page = "View Trees"
         st.rerun()
     
     # Add new species button
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("➕ Add New Species", use_container_width=True):
-            st.session_state.show_add_species = True
+    if st.button("",help="Add New Species", icon=":material/add:"):
+        st.session_state.show_add_species = True
     
     # Add new species form
     if st.session_state.get("show_add_species", False):
@@ -1440,7 +1449,7 @@ def show_species_notes():
                                         height=300,
                                         help="You can use markdown formatting for your notes.")
             
-            col1, col2 = st.columns(2)
+            col1, col2, col3= st.columns(3)
             with col1:
                 submit = st.form_submit_button("Save Species")
             with col2:
@@ -1712,7 +1721,7 @@ def main():
             db.close()
             
     if st.session_state.page == "Settings":
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
         show_settings_form()    
@@ -1721,7 +1730,7 @@ def main():
     if st.session_state.page == "View Trees":
         st.header("Bonsai Collection")
         
-        if st.button("➕ Add New Tree"):
+        if st.button("",icon=":material/add:", help="Add New Tree"):
             st.session_state.page = "Add New Tree"
             st.rerun()
         
@@ -1750,7 +1759,7 @@ def main():
             
             if trees:
                 # Create grid layout
-                col_count = 4
+                col_count = 3
                 cols = st.columns(col_count)
                 for idx, tree in enumerate(trees):
                     with cols[idx % col_count]:
@@ -1767,7 +1776,7 @@ def main():
     
     elif st.session_state.page == "Graveyard":
         # Add back button at the top
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
             
@@ -1775,7 +1784,7 @@ def main():
     
     elif st.session_state.page == "Add New Tree":
         # Add "Back to Collection" button at the top
-        if st.button("← Back to Collection"):
+        if st.button(":material/arrow_back: Back to Collection"):
             st.session_state.page = "View Trees"
             st.rerun()
             
