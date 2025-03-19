@@ -61,6 +61,8 @@ div[class*="key-download_export"] div.stDownloadButton button {
   background-color: #fefefec5;
 }
 
+
+
 /* hides the annoying link symbols */
 h1 > span > a > svg {
     display: none;

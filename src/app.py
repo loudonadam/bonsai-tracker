@@ -1432,10 +1432,22 @@ def show_species_notes():
     """
     Display the species notes page with options to manage species.
     """
+    st.markdown("""
+<style>
+    div[data-testid="stColumn"] {
+        width: fit-content !important;
+        flex: unset;
+    }
+    div[data-testid="stColumn"] * {
+        width: fit-content !important;
+    }
+</style>
+""", unsafe_allow_html=True)
     if st.button(":material/arrow_back: Back to Collection"):
         st.session_state.page = "View Trees"
         st.rerun()
     
+    st.header("Species Notes")
     # Add new species button
     if st.button("",help="Add New Species", icon=":material/add:"):
         st.session_state.show_add_species = True
@@ -1449,6 +1461,8 @@ def show_species_notes():
                                         height=300,
                                         help="You can use markdown formatting for your notes.")
             
+            
+
             col1, col2, col3= st.columns(3)
             with col1:
                 submit = st.form_submit_button("Save Species")
@@ -1486,55 +1500,41 @@ def show_species_notes():
         if not species_list:
             st.info("No species have been added yet. Click 'Add New Species' to get started.")
         else:
-            # Create two columns: one for the list and one for the notes display
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                st.subheader("Species List")
-                for species in species_list:
-                    col_a, col_b, col_c = st.columns([3, 1, 1])
-                    with col_a:
-                        if st.button(f"{species.name}", key=f"view_{species.id}", use_container_width=True):
-                            st.session_state.selected_species = species.id
-                            st.rerun()
-                    with col_b:
-                        if st.button("✏️", key=f"edit_{species.id}"):
+            for species in species_list:
+                
+                with st.expander(f"{species.name}", expanded=False):
+                    
+                    # Check if there are trees using this species
+                    tree_count = db.query(Tree).filter(Tree.species_id == species.id).count()
+                    if tree_count > 0:
+                        st.info(f"This species is used by {tree_count} tree{'s' if tree_count > 1 else ''} in your collection.")
+                    
+                    # Display formatted notes
+                    if species.notes:
+                        st.markdown(species.notes)
+                    else:
+                        st.info("No notes available for this species.")
+                    button_cols = st.columns([1, 1])
+                    
+                    with button_cols[0]:
+                        if st.button("",icon=":material/edit:", key=f"edit_{species.id}", help="Edit Species Notes"):
                             st.session_state.selected_species = species.id
                             st.session_state.page = "Edit Species"
                             st.rerun()
-                    with col_c:
-                        if st.button("🗑️", key=f"delete_{species.id}"):
+                    
+                    with button_cols[1]:
+                        if st.button("", icon=":material/delete:", key=f"delete_{species.id}", help="Delete Species"):
                             st.session_state.delete_species_id = species.id
                             st.session_state.delete_species_name = species.name
                             st.session_state.show_delete_confirmation = True
                             st.rerun()
+                                       
             
+
             # Show species notes if one is selected
-            with col2:
-                if st.session_state.get("selected_species"):
-                    selected = db.query(Species).filter(Species.id == st.session_state.selected_species).first()
-                    if selected:
-                        st.subheader(f"{selected.name} Notes")
-                        
-                        # Check if there are trees using this species
-                        tree_count = db.query(Tree).filter(Tree.species_id == selected.id).count()
-                        if tree_count > 0:
-                            st.info(f"This species is used by {tree_count} tree{'s' if tree_count > 1 else ''} in your collection.")
-                        
-                        # Display formatted notes
-                        if selected.notes:
-                            st.markdown(selected.notes)
-                        else:
-                            st.info("No notes available for this species.")
-                        
-                        # Edit button
-                        if st.button("Edit Notes", key="edit_notes"):
-                            st.session_state.page = "Edit Species"
-                            st.rerun()
-                    else:
-                        st.info("Select a species from the list to view its notes.")
-                else:
-                    st.info("Select a species from the list to view its notes.")
+            if st.session_state.get("selected_species"):
+                selected = db.query(Species).filter(Species.id == st.session_state.selected_species).first()
+
         
         # Delete confirmation dialog
         if st.session_state.get("show_delete_confirmation", False):
@@ -1576,6 +1576,17 @@ def show_species_notes():
 
 def show_edit_species_form(species_id):
     """Display the form to edit a species"""
+    st.markdown("""
+            <style>
+                div[data-testid="stColumn"] {
+                    width: fit-content !important;
+                    flex: unset;
+                }
+                div[data-testid="stColumn"] * {
+                    width: fit-content !important;
+                }
+            </style>
+            """, unsafe_allow_html=True)
     db = SessionLocal()
     try:
         species = db.query(Species).filter(Species.id == species_id).first()
@@ -1602,9 +1613,9 @@ def show_edit_species_form(species_id):
             
             col1, col2 = st.columns(2)
             with col1:
-                submit = st.form_submit_button("Save Changes")
+                submit = st.form_submit_button("",icon=":material/save:", help="Save Changes")
             with col2:
-                cancel = st.form_submit_button("Cancel")
+                cancel = st.form_submit_button(":material/close:", help="Cancel")
             
             if submit:
                 if not species_name:
